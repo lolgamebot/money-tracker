@@ -23,69 +23,85 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     } else {
         $createExpense = $pdo->prepare("INSERT INTO expenses (user_id, category_id, amount, description, date) VALUES (?, ?, ?, ?, ?)");
         $createExpense->execute([$userId, $categoryId, $amount, $description, $date]);
-        $success = "Expense added!";
+        $success = "Expense added successfully!";
     }
 }
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add Expense</title>
+    <title>Add Expense - Money Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
+<body class="bg-[#0a0f1e] min-h-screen text-slate-200">
 
-<body>
+    <?php renderNav(); ?>
 
-    <nav>
-        <a href="index.php">Dashboard</a>
-        <a href="add.php">Add Expense</a>
-        <a href="categories.php">Categories</a>
-        <a href="login.php">Logout</a>
-    </nav>
+    <div class="max-w-xl mx-auto px-6 py-8">
+        <h1 class="text-2xl font-bold text-white mb-6">Add Expense</h1>
 
-    <div class="container">
-        <h1>Add Expense</h1>
+        <?php if (isset($error)): ?>
+            <div class="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg px-4 py-3 mb-6 text-sm"><?= $error ?></div>
+        <?php endif; ?>
 
-        <?php showMessage($error ?? null, $success ?? null); ?>
+        <?php if (isset($success)): ?>
+            <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-lg px-4 py-3 mb-6 text-sm"><?= $success ?></div>
+        <?php endif; ?>
 
         <?php if (count($categories) === 0): ?>
-            <p>You have no categories yet! <a href="categories.php">Add one here</a> before adding an expense.</p>
+            <div class="bg-[#111827] rounded-xl border border-slate-700 p-6 text-center">
+                <p class="text-slate-400 mb-3">You need at least one category before adding an expense.</p>
+                <a href="categories.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">Create a Category</a>
+            </div>
         <?php else: ?>
-            <form action="add.php" method="POST">
-                <label>Amount:</label>
-                <input type="number" name="amount" step="0.01" min="0.01" required>
+            <div class="bg-[#111827] rounded-xl border border-slate-700 p-6">
+                <form action="add.php" method="POST" class="space-y-5">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Amount</label>
+                        <input type="number" name="amount" step="0.01" min="0.01" required
+                            class="w-full bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                    </div>
 
-                <br><br>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Category</label>
+                        <select name="category_id" required
+                            class="w-full bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                            <option value="">-- Select a category --</option>
+                            <?php foreach ($categories as $category): ?>
+                                <option value="<?= $category["id"] ?>"><?= $category["name"] ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
 
-                <label>Category:</label>
-                <select name="category_id" required>
-                    <option value="">--Select a category --</option>
-                    <?php foreach ($categories as $category): ?>
-                        <option value="<?= $category["id"] ?>"><?= $category["name"] ?></option>
-                    <?php endforeach; ?>
-                </select>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Description <span class="text-slate-500">(optional)</span></label>
+                        <input type="text" name="description" placeholder="What was this expense for?"
+                            class="w-full bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                    </div>
 
-                <br><br>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Date</label>
+                        <input type="date" name="date" required
+                            class="w-full bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                    </div>
 
-                <label>Description: <small>(optional)</small></label>
-                <input type="text" name="description" placeholder="What was this expense for?">
-
-                <br><br>
-
-                <label>Date:</label>
-                <input type="date" name="date" required>
-
-                <br><br>
-
-                <button type="submit">Add Expense</button>
-                <a href="index.php">Cancel</a>
-            </form>
+                    <div class="flex gap-3 pt-2">
+                        <button type="submit"
+                            class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-lg transition-colors">
+                            Add Expense
+                        </button>
+                        <a href="index.php"
+                            class="flex-1 text-center bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2.5 rounded-lg transition-colors">
+                            Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
         <?php endif; ?>
     </div>
 
 </body>
-
 </html>
