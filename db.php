@@ -1,0 +1,12 @@
+<?php
+$host = "localhost";
+$dbname = "moneytracker";
+$dbuser = "root";
+$dbpass = "";
+
+try {
+  $pdo = new PDO("mysql:host=$host;dbname=$dbname", $dbuser, $dbpass);
+  $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (PDOException $e) {
+  die("Connection failed: " . $e->getMessage());
+}
