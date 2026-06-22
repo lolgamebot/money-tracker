@@ -13,7 +13,7 @@ if (!isset($_GET["id"])) {
 
 $expenseId = $_GET["id"];
 
-$checkExpense = $pdo->prepare("SELECT * FROM expense WHERE id = ? AND user_id = ?");
+$checkExpense = $pdo->prepare("SELECT * FROM expenses WHERE id = ? AND user_id = ?");
 $checkExpense->execute([$expenseId, $userId]);
 $expense = $checkExpense->fetch();
 
@@ -25,5 +25,5 @@ if (!$expense) {
 $deleteExpense = $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ?");
 $deleteExpense->execute([$expenseId, $userId]);
 
-header("Location: index.php");
+header("Location: index.php"); 
 exit;

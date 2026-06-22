@@ -16,16 +16,22 @@ $getExpenses = $pdo->prepare("
 $getExpenses->execute([$userId]);
 $expenses = $getExpenses->fetchAll();
 
-$getTotal = $pdo->prepare("SELECT SUM(amount) AS total FROM expenses WHERE user_id = ?");
-$getTotal->execute([$userId]);
-$total = $getTotal->fetch()["total"] ?? 0;
+$getTotalIncome = $pdo->prepare("SELECT SUM(amount) AS total FROM expenses WHERE user_id = ? AND type = 'income'");
+$getTotalIncome->execute([$userId]);
+$totalIncome = $getTotalIncome->fetch()["total"] ?? 0;
+
+$getTotalExpense = $pdo->prepare("SELECT SUM(amount) AS total FROM expenses WHERE user_id = ? AND type = 'expense'");
+$getTotalExpense->execute([$userId]);
+$totalExpense = $getTotalExpense->fetch()["total"] ?? 0;
+
+$balance = $totalIncome - $totalExpense;
 
 $getCategoryTotals = $pdo->prepare("
-    SELECT categories.name, SUM(expenses.amount) AS total
+    SELECT categories.name, SUM(expenses.amount) AS total, expenses.type
     FROM expenses
     LEFT JOIN categories ON expenses.category_id = categories.id
-    WHERE expenses.user_id = ?
-    GROUP BY categories.name
+    WHERE expenses.user_id = ? AND expenses.type = 'expense'
+    GROUP BY categories.name, expenses.type
     ORDER BY total DESC
 ");
 $getCategoryTotals->execute([$userId]);
@@ -34,7 +40,7 @@ $categoryTotals = $getCategoryTotals->fetchAll();
 $getMonthTotal = $pdo->prepare("
     SELECT SUM(amount) AS total 
     FROM expenses 
-    WHERE user_id = ? 
+    WHERE user_id = ? AND type = 'expense'
     AND MONTH(date) = MONTH(CURRENT_DATE()) 
     AND YEAR(date) = YEAR(CURRENT_DATE())
 ");
@@ -58,18 +64,24 @@ $monthTotal = $getMonthTotal->fetch()["total"] ?? 0;
         <h1 class="text-2xl font-bold text-white mb-6">Welcome back, <?= $_SESSION["username"] ?>!</h1>
 
         <!-- Summary Cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+            <div class="bg-[#111827] rounded-xl p-5 border border-slate-700">
+                <p class="text-slate-400 text-sm mb-1">Total Income</p>
+                <p class="text-2xl font-bold text-emerald-400">₱<?= number_format($totalIncome, 2) ?></p>
+            </div>
             <div class="bg-[#111827] rounded-xl p-5 border border-slate-700">
                 <p class="text-slate-400 text-sm mb-1">Total Expenses</p>
-                <p class="text-3xl font-bold text-white">₱<?= number_format($total, 2) ?></p>
+                <p class="text-2xl font-bold text-rose-400">₱<?= number_format($totalExpense, 2) ?></p>
+            </div>
+            <div class="bg-[#111827] rounded-xl p-5 border border-slate-700">
+                <p class="text-slate-400 text-sm mb-1">Balance</p>
+                <p class="text-2xl font-bold <?= $balance >= 0 ? 'text-white' : 'text-rose-400' ?>">
+                    ₱<?= number_format($balance, 2) ?>
+                </p>
             </div>
             <div class="bg-[#111827] rounded-xl p-5 border border-slate-700">
                 <p class="text-slate-400 text-sm mb-1">This Month</p>
-                <p class="text-3xl font-bold text-indigo-400">₱<?= number_format($monthTotal, 2) ?></p>
-            </div>
-            <div class="bg-[#111827] rounded-xl p-5 border border-slate-700">
-                <p class="text-slate-400 text-sm mb-1">Total Records</p>
-                <p class="text-3xl font-bold text-white"><?= count($expenses) ?></p>
+                <p class="text-2xl font-bold text-indigo-400">₱<?= number_format($monthTotal, 2) ?></p>
             </div>
         </div>
 
@@ -77,34 +89,35 @@ $monthTotal = $getMonthTotal->fetch()["total"] ?? 0;
         <div class="bg-[#111827] rounded-xl border border-slate-700 p-5 mb-8">
             <h2 class="text-lg font-semibold text-white mb-4">Spending by Category</h2>
             <?php if (count($categoryTotals) === 0): ?>
-                <p class="text-slate-400 text-sm">No data yet.</p>
+                <p class="text-slate-400 text-sm">No expense data yet.</p>
             <?php else: ?>
                 <div class="space-y-3">
                     <?php foreach ($categoryTotals as $cat): ?>
                         <div class="flex items-center justify-between py-2 border-b border-slate-700 last:border-0">
                             <span class="text-slate-300"><?= $cat["name"] ?></span>
-                            <span class="text-emerald-400 font-semibold">₱<?= number_format($cat["total"], 2) ?></span>
+                            <span class="text-rose-400 font-semibold">₱<?= number_format($cat["total"], 2) ?></span>
                         </div>
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
         </div>
 
-        <!-- Expense List -->
+        <!-- Records List -->
         <div class="bg-[#111827] rounded-xl border border-slate-700 p-5">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="text-lg font-semibold text-white">All Expenses</h2>
-                <a href="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">+ Add Expense</a>
+                <h2 class="text-lg font-semibold text-white">All Records</h2>
+                <a href="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">+ Add Record</a>
             </div>
 
             <?php if (count($expenses) === 0): ?>
-                <p class="text-slate-400 text-sm">No expenses yet! <a href="add.php" class="text-indigo-400 hover:underline">Add your first one</a>.</p>
+                <p class="text-slate-400 text-sm">No records yet! <a href="add.php" class="text-indigo-400 hover:underline">Add your first one</a>.</p>
             <?php else: ?>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="text-slate-400 border-b border-slate-700">
                                 <th class="text-left py-2 pr-4">Date</th>
+                                <th class="text-left py-2 pr-4">Type</th>
                                 <th class="text-left py-2 pr-4">Category</th>
                                 <th class="text-left py-2 pr-4">Description</th>
                                 <th class="text-right py-2 pr-4">Amount</th>
@@ -116,16 +129,23 @@ $monthTotal = $getMonthTotal->fetch()["total"] ?? 0;
                                 <tr class="border-b border-slate-800 hover:bg-slate-800/30 transition-colors">
                                     <td class="py-3 pr-4 text-slate-400"><?= $expense["date"] ?></td>
                                     <td class="py-3 pr-4">
+                                        <span class="text-xs px-2 py-1 rounded-full <?= $expense['type'] == 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400' ?>">
+                                            <?= ucfirst($expense['type']) ?>
+                                        </span>
+                                    </td>
+                                    <td class="py-3 pr-4">
                                         <span class="bg-indigo-500/10 text-indigo-400 text-xs px-2 py-1 rounded-full">
                                             <?= $expense["category_name"] ?>
                                         </span>
                                     </td>
                                     <td class="py-3 pr-4 text-slate-300"><?= $expense["description"] ?: "—" ?></td>
-                                    <td class="py-3 pr-4 text-right text-emerald-400 font-semibold">₱<?= number_format($expense["amount"], 2) ?></td>
+                                    <td class="py-3 pr-4 text-right font-semibold <?= $expense['type'] == 'income' ? 'text-emerald-400' : 'text-rose-400' ?>">
+                                        <?= $expense['type'] == 'income' ? '+' : '-' ?>₱<?= number_format($expense["amount"], 2) ?>
+                                    </td>
                                     <td class="py-3 text-right">
                                         <a href="edit.php?id=<?= $expense["id"] ?>" class="text-slate-400 hover:text-white mr-3 transition-colors">Edit</a>
-                                        <a href="delete.php?id=<?= $expense["id"] ?>" 
-                                           onclick="return confirm('Delete this expense?')"
+                                        <a href="delete.php?id=<?= $expense["id"] ?>"
+                                           onclick="return confirm('Delete this record?')"
                                            class="text-rose-400 hover:text-rose-300 transition-colors">Delete</a>
                                     </td>
                                 </tr>
