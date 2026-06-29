@@ -23,8 +23,9 @@ function renderNav() {
         <a href="index.php" class="text-white font-bold text-lg tracking-tight">💰 Money Tracker</a>
         <div class="flex gap-6 text-sm">
             <a href="index.php" class="text-slate-400 hover:text-white transition-colors">Dashboard</a>
-            <a href="add.php" class="text-slate-400 hover:text-white transition-colors">Add Expense</a>
+            <a href="add.php" class="text-slate-400 hover:text-white transition-colors">Add Record</a>
             <a href="categories.php" class="text-slate-400 hover:text-white transition-colors">Categories</a>
+            <a href="profile.php" class="text-slate-400 hover:text-white transition-colors">Profile</a>
             <a href="logout.php" class="text-rose-400 hover:text-rose-300 transition-colors">Logout</a>
         </div>
     </nav>';
