@@ -6,16 +6,50 @@ requireLogin();
 
 $userId = $_SESSION["user_id"];
 
-$getExpenses = $pdo->prepare("
+// Get filter values from GET
+$search = $_GET["search"] ?? "";
+$filterType = $_GET["type"] ?? "";
+$filterCategory = $_GET["category"] ?? "";
+$filterDateFrom = $_GET["date_from"] ?? "";
+$filterDateTo = $_GET["date_to"] ?? "";
+
+// Build dynamic query based on filters
+$query = "
     SELECT expenses.*, categories.name AS category_name 
     FROM expenses 
     LEFT JOIN categories ON expenses.category_id = categories.id 
-    WHERE expenses.user_id = ? 
-    ORDER BY expenses.date DESC
-");
-$getExpenses->execute([$userId]);
+    WHERE expenses.user_id = ?
+";
+$params = [$userId];
+
+if (!empty($search)) {
+    $query .= " AND expenses.description LIKE ?";
+    $params[] = "%" . $search . "%";
+}
+if (!empty($filterType)) {
+    $query .= " AND expenses.type = ?";
+    $params[] = $filterType;
+}
+if (!empty($filterCategory)) {
+    $query .= " AND expenses.category_id = ?";
+    $params[] = $filterCategory;
+}
+if (!empty($filterDateFrom)) {
+    $query .= " AND expenses.date >= ?";
+    $params[] = $filterDateFrom;
+}
+if (!empty($filterDateTo)) {
+    $query .= " AND expenses.date <= ?";
+    $params[] = $filterDateTo;
+}
+
+$query .= " ORDER BY expenses.date DESC";
+
+$getExpenses = $pdo->prepare($query);
+$getExpenses->execute($params);
 $expenses = $getExpenses->fetchAll();
 
+// Summary cards always show full totals regardless of filter
 $getTotalIncome = $pdo->prepare("SELECT SUM(amount) AS total FROM expenses WHERE user_id = ? AND type = 'income'");
 $getTotalIncome->execute([$userId]);
 $totalIncome = $getTotalIncome->fetch()["total"] ?? 0;
@@ -27,11 +61,11 @@ $totalExpense = $getTotalExpense->fetch()["total"] ?? 0;
 $balance = $totalIncome - $totalExpense;
 
 $getCategoryTotals = $pdo->prepare("
-    SELECT categories.name, SUM(expenses.amount) AS total, expenses.type
+    SELECT categories.name, SUM(expenses.amount) AS total
     FROM expenses
     LEFT JOIN categories ON expenses.category_id = categories.id
     WHERE expenses.user_id = ? AND expenses.type = 'expense'
-    GROUP BY categories.name, expenses.type
+    GROUP BY categories.name
     ORDER BY total DESC
 ");
 $getCategoryTotals->execute([$userId]);
@@ -46,6 +80,11 @@ $getMonthTotal = $pdo->prepare("
 ");
 $getMonthTotal->execute([$userId]);
 $monthTotal = $getMonthTotal->fetch()["total"] ?? 0;
+
+// Get categories for filter dropdown
+$getCategories = $pdo->prepare("SELECT * FROM categories WHERE user_id = ? ORDER BY name ASC");
+$getCategories->execute([$userId]);
+$categories = $getCategories->fetchAll();
 ?>
 
 <!DOCTYPE html>
@@ -109,8 +148,61 @@ $monthTotal = $getMonthTotal->fetch()["total"] ?? 0;
                 <a href="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">+ Add Record</a>
             </div>
 
+            <!-- Search and Filter -->
+            <form action="index.php" method="GET" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                <input type="text" name="search" placeholder="Search description..." 
+                    value="<?= htmlspecialchars($search) ?>"
+                    class="bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm">
+
+                <select name="type"
+                    class="bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 text-sm">
+                    <option value="">All Types</option>
+                    <option value="income" <?= $filterType == "income" ? "selected" : "" ?>>Income</option>
+                    <option value="expense" <?= $filterType == "expense" ? "selected" : "" ?>>Expense</option>
+                </select>
+
+                <select name="category"
+                    class="bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 text-sm">
+                    <option value="">All Categories</option>
+                    <?php foreach ($categories as $category): ?>
+                        <option value="<?= $category["id"] ?>" <?= $filterCategory == $category["id"] ? "selected" : "" ?>>
+                            <?= $category["name"] ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+
+                <div class="flex gap-2 items-center">
+                    <label class="text-slate-400 text-sm whitespace-nowrap">From:</label>
+                    <input type="date" name="date_from" value="<?= $filterDateFrom ?>"
+                        class="w-full bg-[#0a0f1e] border border-slate-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-indigo-500 text-sm">
+                </div>
+
+                <div class="flex gap-2 items-center">
+                    <label class="text-slate-400 text-sm whitespace-nowrap">To:</label>
+                    <input type="date" name="date_to" value="<?= $filterDateTo ?>"
+                        class="w-full bg-[#0a0f1e] border border-slate-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-indigo-500 text-sm">
+                </div>
+
+                <div class="flex gap-2">
+                    <button type="submit"
+                        class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors">
+                        Filter
+                    </button>
+                    <a href="index.php"
+                        class="flex-1 text-center bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium py-2.5 rounded-lg transition-colors">
+                        Clear
+                    </a>
+                </div>
+            </form>
+
+            <!-- Results count -->
+            <p class="text-slate-400 text-sm mb-4">
+                Showing <span class="text-white font-medium"><?= count($expenses) ?></span> record(s)
+                <?= (!empty($search) || !empty($filterType) || !empty($filterCategory) || !empty($filterDateFrom) || !empty($filterDateTo)) ? '— <a href="index.php" class="text-indigo-400 hover:underline">Clear filters</a>' : '' ?>
+            </p>
+
             <?php if (count($expenses) === 0): ?>
-                <p class="text-slate-400 text-sm">No records yet! <a href="add.php" class="text-indigo-400 hover:underline">Add your first one</a>.</p>
+                <p class="text-slate-400 text-sm">No records found.</p>
             <?php else: ?>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
