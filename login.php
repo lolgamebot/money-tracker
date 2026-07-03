@@ -43,7 +43,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <title>Login - Money Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-[#0a0f1e] min-h-screen flex items-center justify-center text-slate-200">
+<body class="bg-[#0a0f1e] min-h-screen flex items-center justify-center text-slate-200 px-4">
 
     <div class="w-full max-w-md bg-[#111827] rounded-2xl p-8 border border-slate-700 shadow-xl">
         <div class="mb-8 text-center">

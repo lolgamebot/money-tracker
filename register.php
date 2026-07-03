@@ -42,7 +42,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <title>Register - Money Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-[#0a0f1e] min-h-screen flex items-center justify-center text-slate-200">
+<body class="bg-[#0a0f1e] min-h-screen flex items-center justify-center text-slate-200 px-4">
 
     <div class="w-full max-w-md bg-[#111827] rounded-2xl p-8 border border-slate-700 shadow-xl">
         <div class="mb-8 text-center">
@@ -88,7 +88,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         </form>
 
         <p class="text-center text-slate-400 text-sm mt-6">
-            Already have an account? 
+            Already have an account?
             <a href="login.php" class="text-indigo-400 hover:text-indigo-300 font-medium">Login here</a>
         </p>
     </div>
