@@ -6,50 +6,63 @@ requireLogin();
 
 $userId = $_SESSION["user_id"];
 
-// Get filter values from GET
+// Filter values
 $search = $_GET["search"] ?? "";
 $filterType = $_GET["type"] ?? "";
 $filterCategory = $_GET["category"] ?? "";
 $filterDateFrom = $_GET["date_from"] ?? "";
 $filterDateTo = $_GET["date_to"] ?? "";
 
-// Build dynamic query based on filters
-$query = "
-    SELECT expenses.*, categories.name AS category_name 
-    FROM expenses 
-    LEFT JOIN categories ON expenses.category_id = categories.id 
-    WHERE expenses.user_id = ?
-";
+// Pagination
+$perPage = 10;
+$currentPage = isset($_GET["page"]) ? (int)$_GET["page"] : 1;
+if ($currentPage < 1) $currentPage = 1;
+$offset = ($currentPage - 1) * $perPage;
+
+// Build base filter conditions
+$conditions = "WHERE expenses.user_id = ?";
 $params = [$userId];
 
 if (!empty($search)) {
-    $query .= " AND expenses.description LIKE ?";
+    $conditions .= " AND expenses.description LIKE ?";
     $params[] = "%" . $search . "%";
 }
 if (!empty($filterType)) {
-    $query .= " AND expenses.type = ?";
+    $conditions .= " AND expenses.type = ?";
     $params[] = $filterType;
 }
 if (!empty($filterCategory)) {
-    $query .= " AND expenses.category_id = ?";
+    $conditions .= " AND expenses.category_id = ?";
     $params[] = $filterCategory;
 }
 if (!empty($filterDateFrom)) {
-    $query .= " AND expenses.date >= ?";
+    $conditions .= " AND expenses.date >= ?";
     $params[] = $filterDateFrom;
 }
 if (!empty($filterDateTo)) {
-    $query .= " AND expenses.date <= ?";
+    $conditions .= " AND expenses.date <= ?";
     $params[] = $filterDateTo;
 }
 
-$query .= " ORDER BY expenses.date DESC";
+// Count total records for pagination
+$countQuery = $pdo->prepare("SELECT COUNT(*) FROM expenses LEFT JOIN categories ON expenses.category_id = categories.id $conditions");
+$countQuery->execute($params);
+$totalRecords = $countQuery->fetchColumn();
+$totalPages = ceil($totalRecords / $perPage);
 
-$getExpenses = $pdo->prepare($query);
+// Fetch paginated records
+$getExpenses = $pdo->prepare("
+    SELECT expenses.*, categories.name AS category_name 
+    FROM expenses 
+    LEFT JOIN categories ON expenses.category_id = categories.id 
+    $conditions
+    ORDER BY expenses.date DESC
+    LIMIT $perPage OFFSET $offset
+");
 $getExpenses->execute($params);
 $expenses = $getExpenses->fetchAll();
 
-// Summary cards always show full totals regardless of filter
+// Summary totals — always full, not filtered
 $getTotalIncome = $pdo->prepare("SELECT SUM(amount) AS total FROM expenses WHERE user_id = ? AND type = 'income'");
 $getTotalIncome->execute([$userId]);
 $totalIncome = $getTotalIncome->fetch()["total"] ?? 0;
@@ -81,10 +94,19 @@ $getMonthTotal = $pdo->prepare("
 $getMonthTotal->execute([$userId]);
 $monthTotal = $getMonthTotal->fetch()["total"] ?? 0;
 
-// Get categories for filter dropdown
 $getCategories = $pdo->prepare("SELECT * FROM categories WHERE user_id = ? ORDER BY name ASC");
 $getCategories->execute([$userId]);
 $categories = $getCategories->fetchAll();
+
+// Build query string for pagination links (preserve filters)
+$queryParams = array_filter([
+    "search" => $search,
+    "type" => $filterType,
+    "category" => $filterCategory,
+    "date_from" => $filterDateFrom,
+    "date_to" => $filterDateTo,
+]);
+$queryString = http_build_query($queryParams);
 ?>
 
 <!DOCTYPE html>
@@ -150,7 +172,7 @@ $categories = $getCategories->fetchAll();
 
             <!-- Search and Filter -->
             <form action="index.php" method="GET" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-                <input type="text" name="search" placeholder="Search description..." 
+                <input type="text" name="search" placeholder="Search description..."
                     value="<?= htmlspecialchars($search) ?>"
                     class="bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm">
 
@@ -197,7 +219,10 @@ $categories = $getCategories->fetchAll();
 
             <!-- Results count -->
             <p class="text-slate-400 text-sm mb-4">
-                Showing <span class="text-white font-medium"><?= count($expenses) ?></span> record(s)
+                Showing <span class="text-white font-medium"><?= count($expenses) ?></span> of 
+                <span class="text-white font-medium"><?= $totalRecords ?></span> record(s)
+                — Page <span class="text-white font-medium"><?= $currentPage ?></span> of 
+                <span class="text-white font-medium"><?= max($totalPages, 1) ?></span>
                 <?= (!empty($search) || !empty($filterType) || !empty($filterCategory) || !empty($filterDateFrom) || !empty($filterDateTo)) ? '— <a href="index.php" class="text-indigo-400 hover:underline">Clear filters</a>' : '' ?>
             </p>
 
@@ -245,6 +270,37 @@ $categories = $getCategories->fetchAll();
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Pagination -->
+                <?php if ($totalPages > 1): ?>
+                    <div class="flex items-center justify-between mt-6">
+                        <p class="text-slate-400 text-sm">
+                            Page <?= $currentPage ?> of <?= $totalPages ?>
+                        </p>
+                        <div class="flex gap-2">
+                            <?php if ($currentPage > 1): ?>
+                                <a href="?page=<?= $currentPage - 1 ?>&<?= $queryString ?>"
+                                    class="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+                                    ← Previous
+                                </a>
+                            <?php endif; ?>
+
+                            <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                                <a href="?page=<?= $i ?>&<?= $queryString ?>"
+                                    class="<?= $i == $currentPage ? 'bg-indigo-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white' ?> text-sm px-4 py-2 rounded-lg transition-colors">
+                                    <?= $i ?>
+                                </a>
+                            <?php endfor; ?>
+
+                            <?php if ($currentPage < $totalPages): ?>
+                                <a href="?page=<?= $currentPage + 1 ?>&<?= $queryString ?>"
+                                    class="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+                                    Next →
+                                </a>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
     </div>
