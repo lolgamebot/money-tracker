@@ -16,14 +16,59 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $description = $_POST["description"];
     $date = $_POST["date"];
     $type = $_POST["type"];
+    $isRecurring = isset($_POST["is_recurring"]) ? 1 : 0;
+    $recurringInterval = $isRecurring ? $_POST["recurring_interval"] : null;
+    $durationType = $isRecurring ? $_POST["duration_type"] : null;
+    $recurringDuration = null;
+    $recurringEndDate = null;
+
+    if ($isRecurring && $durationType !== "infinite") {
+        $startDate = new DateTime($date);
+
+        if ($durationType === "preset") {
+            $recurringDuration = (int)$_POST["recurring_duration_preset"];
+            $endDate = clone $startDate;
+            $endDate->modify("+$recurringDuration months");
+            $recurringEndDate = $endDate->format('Y-m-d');
+
+        } elseif ($durationType === "custom") {
+            $customAmount = (int)$_POST["recurring_duration_custom"];
+            $customUnit = $_POST["recurring_duration_unit"];
+            $recurringDuration = $customAmount;
+            $endDate = clone $startDate;
+
+            switch ($customUnit) {
+                case 'days':
+                    $endDate->modify("+$customAmount days");
+                    break;
+                case 'weeks':
+                    $endDate->modify("+$customAmount weeks");
+                    break;
+                case 'months':
+                    $endDate->modify("+$customAmount months");
+                    break;
+                case 'years':
+                    $endDate->modify("+$customAmount years");
+                    break;
+            }
+            $recurringEndDate = $endDate->format('Y-m-d');
+        }
+    }
 
     if (empty($amount) || empty($categoryId) || empty($date) || empty($type)) {
         $error = "Please fill all required fields!";
     } elseif (!is_numeric($amount) || $amount <= 0) {
         $error = "Please enter a valid amount!";
     } else {
-        $createExpense = $pdo->prepare("INSERT INTO expenses (user_id, category_id, amount, type, description, date) VALUES (?, ?, ?, ?, ?, ?)");
-        $createExpense->execute([$userId, $categoryId, $amount, $type, $description, $date]);
+        $createExpense = $pdo->prepare("
+            INSERT INTO expenses 
+            (user_id, category_id, amount, type, description, date, is_recurring, recurring_interval, recurring_duration, recurring_end_date) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $createExpense->execute([
+            $userId, $categoryId, $amount, $type, $description, $date,
+            $isRecurring, $recurringInterval, $recurringDuration, $recurringEndDate
+        ]);
         $success = "Record added successfully!";
     }
 }
@@ -60,6 +105,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <?php else: ?>
             <div class="bg-[#111827] rounded-xl border border-slate-700 p-6">
                 <form action="add.php" method="POST" class="space-y-5">
+
                     <div>
                         <label class="block text-sm font-medium text-slate-400 mb-1">Type</label>
                         <select name="type" required
@@ -98,6 +144,69 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             class="w-full bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
                     </div>
 
+                    <!-- Recurring Toggle -->
+                    <div class="border border-slate-700 rounded-lg p-4">
+                        <label class="flex items-center gap-3 cursor-pointer mb-4">
+                            <input type="checkbox" name="is_recurring" id="isRecurring"
+                                class="w-4 h-4 accent-indigo-600">
+                            <span class="text-slate-300 font-medium">This is a recurring record</span>
+                        </label>
+
+                        <div id="recurringOptions" class="space-y-4 hidden">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-400 mb-1">Repeats Every</label>
+                                <select name="recurring_interval"
+                                    class="w-full bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                                    <option value="daily">Day</option>
+                                    <option value="weekly">Week</option>
+                                    <option value="monthly" selected>Month</option>
+                                    <option value="yearly">Year</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-slate-400 mb-1">Duration</label>
+                                <select name="duration_type" id="durationType"
+                                    class="w-full bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                                    <option value="infinite">Infinite (no end)</option>
+                                    <option value="preset">Preset</option>
+                                    <option value="custom">Custom</option>
+                                </select>
+                            </div>
+
+                            <!-- Preset Options -->
+                            <div id="presetOptions" class="hidden">
+                                <label class="block text-sm font-medium text-slate-400 mb-1">Select Duration</label>
+                                <select name="recurring_duration_preset"
+                                    class="w-full bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                                    <option value="1">1 month</option>
+                                    <option value="3">3 months</option>
+                                    <option value="6">6 months</option>
+                                    <option value="12">12 months (1 year)</option>
+                                    <option value="24">24 months (2 years)</option>
+                                    <option value="36">36 months (3 years)</option>
+                                </select>
+                            </div>
+
+                            <!-- Custom Options -->
+                            <div id="customOptions" class="hidden">
+                                <label class="block text-sm font-medium text-slate-400 mb-1">Custom Duration</label>
+                                <div class="flex gap-2">
+                                    <input type="number" name="recurring_duration_custom" min="1" placeholder="e.g. 15"
+                                        class="flex-1 bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                                    <select name="recurring_duration_unit"
+                                        class="bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                                        <option value="days">Days</option>
+                                        <option value="weeks">Weeks</option>
+                                        <option value="months">Months</option>
+                                        <option value="years">Years</option>
+                                    </select>
+                                </div>
+                                <p class="text-slate-500 text-xs mt-1">Enter any number and pick the unit</p>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="flex gap-3 pt-2">
                         <button type="submit"
                             class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-lg transition-colors">
@@ -112,6 +221,32 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             </div>
         <?php endif; ?>
     </div>
+
+    <script>
+        // Recurring toggle
+        const recurringCheckbox = document.getElementById('isRecurring');
+        const recurringOptions = document.getElementById('recurringOptions');
+
+        recurringCheckbox.addEventListener('change', function() {
+            recurringOptions.classList.toggle('hidden', !this.checked);
+        });
+
+        // Duration type toggle
+        const durationType = document.getElementById('durationType');
+        const presetOptions = document.getElementById('presetOptions');
+        const customOptions = document.getElementById('customOptions');
+
+        durationType.addEventListener('change', function() {
+            presetOptions.classList.add('hidden');
+            customOptions.classList.add('hidden');
+
+            if (this.value === 'preset') {
+                presetOptions.classList.remove('hidden');
+            } else if (this.value === 'custom') {
+                customOptions.classList.remove('hidden');
+            }
+        });
+    </script>
 
 </body>
 </html>

@@ -22,5 +22,10 @@ CREATE TABLE expenses (
   type ENUM('expense', 'income') NOT NULL DEFAULT 'expense',
   description VARCHAR(255),
   date DATE,
+  is_recurring TINYINT(1) DEFAULT 0,
+  recurring_interval ENUM('daily', 'weekly', 'monthly', 'yearly') DEFAULT NULL,
+  recurring_duration INT DEFAULT NULL,
+  recurring_end_date DATE DEFAULT NULL,
+  parent_id INT DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

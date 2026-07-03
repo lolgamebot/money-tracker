@@ -6,6 +6,9 @@ requireLogin();
 
 $userId = $_SESSION["user_id"];
 
+require "process_recurring.php";
+processRecurring($pdo, $userId);
+
 // Filter values
 $search = $_GET["search"] ?? "";
 $filterType = $_GET["type"] ?? "";
@@ -62,7 +65,7 @@ $getExpenses = $pdo->prepare("
 $getExpenses->execute($params);
 $expenses = $getExpenses->fetchAll();
 
-// Summary totals — always full, not filtered
+// Summary totals
 $getTotalIncome = $pdo->prepare("SELECT SUM(amount) AS total FROM expenses WHERE user_id = ? AND type = 'income'");
 $getTotalIncome->execute([$userId]);
 $totalIncome = $getTotalIncome->fetch()["total"] ?? 0;
@@ -98,7 +101,7 @@ $getCategories = $pdo->prepare("SELECT * FROM categories WHERE user_id = ? ORDER
 $getCategories->execute([$userId]);
 $categories = $getCategories->fetchAll();
 
-// Build query string for pagination links (preserve filters)
+// Build query string for pagination links
 $queryParams = array_filter([
     "search" => $search,
     "type" => $filterType,
@@ -219,9 +222,9 @@ $queryString = http_build_query($queryParams);
 
             <!-- Results count -->
             <p class="text-slate-400 text-sm mb-4">
-                Showing <span class="text-white font-medium"><?= count($expenses) ?></span> of 
+                Showing <span class="text-white font-medium"><?= count($expenses) ?></span> of
                 <span class="text-white font-medium"><?= $totalRecords ?></span> record(s)
-                — Page <span class="text-white font-medium"><?= $currentPage ?></span> of 
+                — Page <span class="text-white font-medium"><?= $currentPage ?></span> of
                 <span class="text-white font-medium"><?= max($totalPages, 1) ?></span>
                 <?= (!empty($search) || !empty($filterType) || !empty($filterCategory) || !empty($filterDateFrom) || !empty($filterDateTo)) ? '— <a href="index.php" class="text-indigo-400 hover:underline">Clear filters</a>' : '' ?>
             </p>

@@ -22,6 +22,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if ($account && password_verify($password, $account["password"])) {
             $_SESSION["user_id"] = $account["id"];
             $_SESSION["username"] = $account["username"];
+
+            require "process_recurring.php";
+            processRecurring($pdo, $account["id"]);
+
             header("Location: index.php");
             exit;
         } else {
@@ -73,7 +77,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         </form>
 
         <p class="text-center text-slate-400 text-sm mt-6">
-            Don't have an account? 
+            Don't have an account?
             <a href="register.php" class="text-indigo-400 hover:text-indigo-300 font-medium">Register here</a>
         </p>
     </div>
