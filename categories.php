@@ -83,7 +83,7 @@ if (isset($_GET["edit"])) {
 
     <?php renderNav(); ?>
 
-    <div class="max-w-xl mx-auto px-6 py-8">
+    <div class="max-w-xl mx-auto px-4 sm:px-6 py-6 sm:py-8 w-full">
         <h1 class="text-2xl font-bold text-white mb-6">My Categories</h1>
 
         <?php if (isset($error)): ?>
@@ -95,28 +95,30 @@ if (isset($_GET["edit"])) {
         <?php endif; ?>
 
         <!-- Add or Edit Form -->
-        <div class="bg-[#111827] rounded-xl border border-slate-700 p-6 mb-6">
+        <div class="bg-[#111827] rounded-xl border border-slate-700 p-4 sm:p-6 mb-6">
             <?php if ($editingCategory): ?>
-                <p class="text-sm text-slate-400 mb-3">Renaming: <span class="text-white font-medium"><?= $editingCategory["name"] ?></span></p>
-                <form action="categories.php?edit=<?= $editingCategory["id"] ?>" method="POST" class="flex gap-3">
-                    <input type="text" name="name" value="<?= $editingCategory["name"] ?>" required
-                        class="flex-1 bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
-                    <button type="submit"
-                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2.5 rounded-lg transition-colors">
-                        Save
-                    </button>
-                    <a href="categories.php"
-                        class="bg-slate-700 hover:bg-slate-600 text-white font-semibold px-5 py-2.5 rounded-lg transition-colors">
-                        Cancel
-                    </a>
+                <p class="text-sm text-slate-400 mb-3">Renaming: <span class="text-white font-medium"><?= htmlspecialchars($editingCategory["name"]) ?></span></p>
+                <form action="categories.php?edit=<?= $editingCategory["id"] ?>" method="POST" class="flex flex-col sm:flex-row gap-3">
+                    <input type="text" name="name" value="<?= htmlspecialchars($editingCategory["name"]) ?>" required
+                        class="flex-1 bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 text-sm">
+                    <div class="flex gap-2">
+                        <button type="submit"
+                            class="flex-1 sm:flex-initial bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2.5 rounded-lg transition-colors text-sm">
+                            Save
+                        </button>
+                        <a href="categories.php"
+                            class="flex-1 sm:flex-initial text-center bg-slate-700 hover:bg-slate-600 text-white font-semibold px-5 py-2.5 rounded-lg transition-colors text-sm">
+                            Cancel
+                        </a>
+                    </div>
                 </form>
             <?php else: ?>
-                <form action="categories.php" method="POST" class="flex gap-3">
+                <form action="categories.php" method="POST" class="flex flex-col sm:flex-row gap-3">
                     <input type="text" name="name" placeholder="e.g. Food, Salary..." required
-                        class="flex-1 bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                        class="flex-1 bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 text-sm">
                     <button type="submit"
-                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2.5 rounded-lg transition-colors">
-                        Add
+                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm">
+                        Add Category
                     </button>
                 </form>
             <?php endif; ?>

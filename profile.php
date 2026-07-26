@@ -69,11 +69,11 @@ if (isset($_POST["change_password"])) {
 
     <?php renderNav(); ?>
 
-    <div class="max-w-xl mx-auto px-6 py-8">
+    <div class="max-w-xl mx-auto px-4 sm:px-6 py-6 sm:py-8 w-full">
         <h1 class="text-2xl font-bold text-white mb-6">My Profile</h1>
 
         <!-- Account Info -->
-        <div class="bg-[#111827] rounded-xl border border-slate-700 p-6 mb-6">
+        <div class="bg-[#111827] rounded-xl border border-slate-700 p-4 sm:p-6 mb-6">
             <div class="flex items-center gap-4 mb-4">
                 <div class="w-14 h-14 rounded-full bg-indigo-600 flex items-center justify-center text-2xl font-bold text-white">
                     <?= strtoupper(substr($account["username"], 0, 1)) ?>

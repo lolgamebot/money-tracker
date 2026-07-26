@@ -6,15 +6,31 @@ requireLogin();
 
 $userId = $_SESSION["user_id"];
 
-// Handle cancel recurring
+// Run generator to catch up any missing entries
+require "process_recurring.php";
+processRecurring($pdo, $userId);
+
+// Handle stop recurring (cancels future recurrences, keeps dashboard entries)
 if (isset($_GET["cancel"])) {
-    $cancelId = $_GET["cancel"];
-    $cancelRecurring = $pdo->prepare("UPDATE expenses SET is_recurring = 0, recurring_end_date = CURRENT_DATE() WHERE id = ? AND user_id = ?");
+    $cancelId = (int)$_GET["cancel"];
+    $cancelRecurring = $pdo->prepare("UPDATE expenses SET is_recurring = 0 WHERE id = ? AND user_id = ?");
     $cancelRecurring->execute([$cancelId, $userId]);
+    $_SESSION["flash_success"] = "Recurring schedule stopped. Generated dashboard entries remain intact.";
     header("Location: recurring.php");
     exit;
 }
 
+// Handle delete all records (deletes parent template AND all generated child entries)
+if (isset($_GET["delete_all"])) {
+    $deleteId = (int)$_GET["delete_all"];
+    $deleteAll = $pdo->prepare("DELETE FROM expenses WHERE user_id = ? AND (id = ? OR parent_id = ?)");
+    $deleteAll->execute([$userId, $deleteId, $deleteId]);
+    $_SESSION["flash_success"] = "Deleted recurring template and all associated dashboard records.";
+    header("Location: recurring.php");
+    exit;
+}
+
+// Fetch all active recurring templates
 $getRecurring = $pdo->prepare("
     SELECT expenses.*, categories.name AS category_name
     FROM expenses
@@ -24,6 +40,14 @@ $getRecurring = $pdo->prepare("
 ");
 $getRecurring->execute([$userId]);
 $recurringRecords = $getRecurring->fetchAll();
+
+// Count generated children for each recurring record
+$generatedCounts = [];
+foreach ($recurringRecords as $record) {
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM expenses WHERE user_id = ? AND (parent_id = ? OR id = ?)");
+    $countStmt->execute([$userId, $record["id"], $record["id"]]);
+    $generatedCounts[$record["id"]] = $countStmt->fetchColumn();
+}
 ?>
 
 <!DOCTYPE html>
@@ -31,70 +55,163 @@ $recurringRecords = $getRecurring->fetchAll();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Recurring - Money Tracker</title>
+    <title>Recurring Records - Money Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-[#0a0f1e] min-h-screen text-slate-200">
 
     <?php renderNav(); ?>
 
-    <div class="max-w-5xl mx-auto px-6 py-8">
-        <h1 class="text-2xl font-bold text-white mb-6">Recurring Records</h1>
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h1 class="text-2xl font-bold text-white">Recurring Records</h1>
+                <p class="text-slate-400 text-sm mt-1">Manage scheduled automated income and expenses.</p>
+            </div>
+            <a href="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
+                <span>+</span> Add Recurring
+            </a>
+        </div>
+
+        <?php if (isset($_SESSION["flash_success"])): ?>
+            <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-lg px-4 py-3 mb-6 text-sm flex items-center justify-between">
+                <span><?= $_SESSION["flash_success"] ?></span>
+                <?php unset($_SESSION["flash_success"]); ?>
+            </div>
+        <?php endif; ?>
 
         <?php if (count($recurringRecords) === 0): ?>
-            <div class="bg-[#111827] rounded-xl border border-slate-700 p-10 text-center">
-                <p class="text-slate-400 mb-3">No recurring records yet.</p>
-                <a href="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">Add a recurring record</a>
+            <div class="bg-[#111827] rounded-xl border border-slate-700 p-8 sm:p-10 text-center">
+                <div class="inline-flex p-3 rounded-full bg-slate-800 text-slate-400 mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                </div>
+                <h3 class="text-lg font-semibold text-white mb-1">No Active Recurring Records</h3>
+                <p class="text-slate-400 text-sm mb-4">Set up automated recurring expenses or income so they repeat on your schedule.</p>
+                <a href="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors inline-block">Create Recurring Record</a>
             </div>
         <?php else: ?>
-            <div class="bg-[#111827] rounded-xl border border-slate-700 p-5">
+            <!-- Desktop Table View -->
+            <div class="hidden md:block bg-[#111827] rounded-xl border border-slate-700 overflow-hidden shadow-lg">
                 <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="text-slate-400 border-b border-slate-700">
-                                <th class="text-left py-2 pr-4">Description</th>
-                                <th class="text-left py-2 pr-4">Type</th>
-                                <th class="text-left py-2 pr-4">Category</th>
-                                <th class="text-left py-2 pr-4">Amount</th>
-                                <th class="text-left py-2 pr-4">Repeats</th>
-                                <th class="text-left py-2 pr-4">Started</th>
-                                <th class="text-left py-2 pr-4">Ends</th>
-                                <th class="text-right py-2">Actions</th>
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-slate-400 uppercase bg-[#0d1322] border-b border-slate-700">
+                            <tr>
+                                <th class="py-3.5 px-4 font-semibold">Description</th>
+                                <th class="py-3.5 px-4 font-semibold">Type</th>
+                                <th class="py-3.5 px-4 font-semibold">Category</th>
+                                <th class="py-3.5 px-4 font-semibold">Amount</th>
+                                <th class="py-3.5 px-4 font-semibold">Frequency</th>
+                                <th class="py-3.5 px-4 font-semibold">Start Date</th>
+                                <th class="py-3.5 px-4 font-semibold">End Date</th>
+                                <th class="py-3.5 px-4 font-semibold text-center">Dashboard Entries</th>
+                                <th class="py-3.5 px-4 font-semibold text-right">Actions</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody class="divide-y divide-slate-800">
                             <?php foreach ($recurringRecords as $record): ?>
-                                <tr class="border-b border-slate-800 hover:bg-slate-800/30 transition-colors">
-                                    <td class="py-3 pr-4 text-slate-300"><?= $record["description"] ?: "—" ?></td>
-                                    <td class="py-3 pr-4">
-                                        <span class="text-xs px-2 py-1 rounded-full <?= $record['type'] == 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400' ?>">
+                                <?php $count = $generatedCounts[$record["id"]] ?? 1; ?>
+                                <tr class="hover:bg-slate-800/40 transition-colors">
+                                    <td class="py-3.5 px-4 text-white font-medium">
+                                        <?= htmlspecialchars($record["description"] ?: "—") ?>
+                                    </td>
+                                    <td class="py-3.5 px-4">
+                                        <span class="text-xs font-medium px-2.5 py-1 rounded-full <?= $record['type'] == 'income' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20' ?>">
                                             <?= ucfirst($record['type']) ?>
                                         </span>
                                     </td>
-                                    <td class="py-3 pr-4">
-                                        <span class="bg-indigo-500/10 text-indigo-400 text-xs px-2 py-1 rounded-full">
-                                            <?= $record["category_name"] ?>
+                                    <td class="py-3.5 px-4">
+                                        <span class="bg-indigo-500/10 text-indigo-400 text-xs font-medium px-2.5 py-1 rounded-full border border-indigo-500/20">
+                                            <?= htmlspecialchars($record["category_name"]) ?>
                                         </span>
                                     </td>
-                                    <td class="py-3 pr-4 font-semibold <?= $record['type'] == 'income' ? 'text-emerald-400' : 'text-rose-400' ?>">
+                                    <td class="py-3.5 px-4 font-semibold whitespace-nowrap <?= $record['type'] == 'income' ? 'text-emerald-400' : 'text-rose-400' ?>">
                                         <?= $record['type'] == 'income' ? '+' : '-' ?>₱<?= number_format($record["amount"], 2) ?>
                                     </td>
-                                    <td class="py-3 pr-4 text-slate-300 capitalize"><?= $record["recurring_interval"] ?></td>
-                                    <td class="py-3 pr-4 text-slate-400"><?= $record["date"] ?></td>
-                                    <td class="py-3 pr-4 text-slate-400">
-                                        <?= $record["recurring_end_date"] ? $record["recurring_end_date"] : '<span class="text-indigo-400">Infinite</span>' ?>
+                                    <td class="py-3.5 px-4 text-slate-300 capitalize">
+                                        <span class="inline-flex items-center gap-1.5">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                            <?= ucfirst($record["recurring_interval"]) ?>
+                                        </span>
                                     </td>
-                                    <td class="py-3 text-right">
-                                        <a href="edit.php?id=<?= $record["id"] ?>" class="text-slate-400 hover:text-white mr-3 transition-colors">Edit</a>
-                                        <a href="recurring.php?cancel=<?= $record["id"] ?>"
-                                           onclick="return confirm('Cancel this recurring record?')"
-                                           class="text-rose-400 hover:text-rose-300 transition-colors">Cancel</a>
+                                    <td class="py-3.5 px-4 text-slate-400 whitespace-nowrap"><?= $record["date"] ?></td>
+                                    <td class="py-3.5 px-4 text-slate-400 whitespace-nowrap">
+                                        <?= $record["recurring_end_date"] ? $record["recurring_end_date"] : '<span class="text-indigo-400 font-medium">Infinite</span>' ?>
+                                    </td>
+                                    <td class="py-3.5 px-4 text-center">
+                                        <span class="bg-slate-800 text-slate-300 text-xs px-2.5 py-1 rounded-md font-semibold border border-slate-700">
+                                            <?= $count ?> record<?= $count > 1 ? 's' : '' ?>
+                                        </span>
+                                    </td>
+                                    <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                                        <div class="flex items-center justify-end gap-2">
+                                            <a href="edit.php?id=<?= $record["id"] ?>" 
+                                               class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-2.5 py-1.5 rounded-lg border border-slate-700 transition-colors">
+                                                Edit
+                                            </a>
+                                            <a href="recurring.php?cancel=<?= $record["id"] ?>"
+                                               onclick="return confirm('Stop recurring schedule?\n\nFuture entries will no longer automatically generate, but existing records on your dashboard will remain intact.')"
+                                               class="text-xs bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-1.5 rounded-lg transition-colors">
+                                                Stop
+                                            </a>
+                                            <a href="recurring.php?delete_all=<?= $record["id"] ?>"
+                                               onclick="return confirm('Are you sure you want to delete this recurring expense AND ALL <?= $count ?> generated record(s) from your dashboard?')"
+                                               class="text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-1.5 rounded-lg font-medium transition-colors">
+                                                Delete All Records
+                                            </a>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            <!-- Mobile Card View -->
+            <div class="block md:hidden space-y-4">
+                <?php foreach ($recurringRecords as $record): ?>
+                    <?php $count = $generatedCounts[$record["id"]] ?? 1; ?>
+                    <div class="bg-[#111827] border border-slate-700 rounded-xl p-4 space-y-3 shadow-md">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <h3 class="font-bold text-white text-base">
+                                    <?= htmlspecialchars($record["description"] ?: ($record["category_name"] . " " . ucfirst($record["type"]))) ?>
+                                </h3>
+                                <p class="text-xs text-slate-400 mt-0.5">
+                                    Started: <?= $record["date"] ?> • Ends: <?= $record["recurring_end_date"] ?: 'Infinite' ?>
+                                </p>
+                            </div>
+                            <span class="font-bold text-lg whitespace-nowrap <?= $record['type'] == 'income' ? 'text-emerald-400' : 'text-rose-400' ?>">
+                                <?= $record['type'] == 'income' ? '+' : '-' ?>₱<?= number_format($record["amount"], 2) ?>
+                            </span>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800">
+                            <span class="text-xs font-medium px-2.5 py-0.5 rounded-full <?= $record['type'] == 'income' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20' ?>">
+                                <?= ucfirst($record['type']) ?>
+                            </span>
+                            <span class="bg-indigo-500/10 text-indigo-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-indigo-500/20">
+                                <?= htmlspecialchars($record["category_name"]) ?>
+                            </span>
+                            <span class="bg-slate-800 text-slate-300 text-xs px-2.5 py-0.5 rounded-full border border-slate-700 capitalize">
+                                🔄 <?= ucfirst($record["recurring_interval"]) ?>
+                            </span>
+                            <span class="bg-slate-800 text-slate-400 text-xs px-2 py-0.5 rounded border border-slate-700">
+                                <?= $count ?> generated
+                            </span>
+                        </div>
+
+                        <div class="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-800/80">
+                            <a href="edit.php?id=<?= $record["id"] ?>" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700">Edit</a>
+                            <a href="recurring.php?cancel=<?= $record["id"] ?>" onclick="return confirm('Stop recurring schedule? Future entries will stop generating.')" class="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg">Stop</a>
+                            <a href="recurring.php?delete_all=<?= $record["id"] ?>" onclick="return confirm('Delete this recurring expense AND ALL <?= $count ?> generated records?')" class="text-xs bg-rose-500/10 text-rose-400 border border-rose-500/30 px-3 py-1.5 rounded-lg font-medium">Delete All Records</a>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
             </div>
         <?php endif; ?>
     </div>

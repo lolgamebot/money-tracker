@@ -55,41 +55,47 @@ $monthlyIncome = array_column($monthlyData, 'income');
 
     <?php renderNav(); ?>
 
-    <div class="max-w-5xl mx-auto px-6 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 w-full">
         <h1 class="text-2xl font-bold text-white mb-6">Charts & Analytics</h1>
 
         <?php if (count($categoryData) === 0 && count($monthlyData) === 0): ?>
-            <div class="bg-[#111827] rounded-xl border border-slate-700 p-10 text-center">
+            <div class="bg-[#111827] rounded-xl border border-slate-700 p-8 sm:p-10 text-center">
                 <p class="text-slate-400 mb-3">No data yet to display charts.</p>
                 <a href="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">Add your first record</a>
             </div>
         <?php else: ?>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <!-- Pie Chart -->
-                <div class="bg-[#111827] rounded-xl border border-slate-700 p-6">
+                <div class="bg-[#111827] rounded-xl border border-slate-700 p-4 sm:p-6">
                     <h2 class="text-lg font-semibold text-white mb-4">Spending by Category</h2>
                     <?php if (count($categoryData) === 0): ?>
                         <p class="text-slate-400 text-sm">No expense data yet.</p>
                     <?php else: ?>
-                        <canvas id="categoryChart"></canvas>
+                        <div class="relative w-full max-w-sm mx-auto h-64 sm:h-72">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
                     <?php endif; ?>
                 </div>
 
                 <!-- Income vs Expense Pie -->
-                <div class="bg-[#111827] rounded-xl border border-slate-700 p-6">
+                <div class="bg-[#111827] rounded-xl border border-slate-700 p-4 sm:p-6">
                     <h2 class="text-lg font-semibold text-white mb-4">Income vs Expenses</h2>
-                    <canvas id="incomeExpenseChart"></canvas>
+                    <div class="relative w-full max-w-sm mx-auto h-64 sm:h-72">
+                        <canvas id="incomeExpenseChart"></canvas>
+                    </div>
                 </div>
             </div>
 
             <!-- Bar Chart — full width -->
-            <div class="bg-[#111827] rounded-xl border border-slate-700 p-6">
+            <div class="bg-[#111827] rounded-xl border border-slate-700 p-4 sm:p-6">
                 <h2 class="text-lg font-semibold text-white mb-4">Last 6 Months Overview</h2>
                 <?php if (count($monthlyData) === 0): ?>
                     <p class="text-slate-400 text-sm">No monthly data yet.</p>
                 <?php else: ?>
-                    <canvas id="monthlyChart"></canvas>
+                    <div class="relative w-full h-64 sm:h-80 md:h-96">
+                        <canvas id="monthlyChart"></canvas>
+                    </div>
                 <?php endif; ?>
             </div>
 
@@ -98,6 +104,8 @@ $monthlyIncome = array_column($monthlyData, 'income');
 
     <script>
         const chartDefaults = {
+            responsive: true,
+            maintainAspectRatio: false,
             color: '#94a3b8',
             plugins: {
                 legend: {

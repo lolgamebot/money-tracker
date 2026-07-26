@@ -11,7 +11,8 @@ if (!isset($_GET["id"])) {
     exit;
 }
 
-$expenseId = $_GET["id"];
+$expenseId = (int)$_GET["id"];
+$mode = $_GET["mode"] ?? "single";
 
 $checkExpense = $pdo->prepare("SELECT * FROM expenses WHERE id = ? AND user_id = ?");
 $checkExpense->execute([$expenseId, $userId]);
@@ -22,8 +23,24 @@ if (!$expense) {
     exit;
 }
 
-$deleteExpense = $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ?");
-$deleteExpense->execute([$expenseId, $userId]);
+if ($mode === "all") {
+    // Determine the recurring series parent ID
+    $parentId = $expense["is_recurring"] ? $expense["id"] : $expense["parent_id"];
+    
+    if ($parentId) {
+        // Delete parent template and all generated children in series
+        $deleteSeries = $pdo->prepare("DELETE FROM expenses WHERE user_id = ? AND (id = ? OR parent_id = ?)");
+        $deleteSeries->execute([$userId, $parentId, $parentId]);
+    } else {
+        // Fallback to single delete if no parent ID found
+        $deleteExpense = $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ?");
+        $deleteExpense->execute([$expenseId, $userId]);
+    }
+} else {
+    // Delete only this specific record
+    $deleteExpense = $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ?");
+    $deleteExpense->execute([$expenseId, $userId]);
+}
 
 header("Location: index.php"); 
 exit;
