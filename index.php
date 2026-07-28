@@ -110,6 +110,13 @@ $queryParams = array_filter([
     "date_to" => $filterDateTo,
 ]);
 $queryString = http_build_query($queryParams);
+
+// SVG icon snippets
+$editIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>';
+$trashIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>';
+$refreshIcon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>';
+$chevronLeft = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>';
+$chevronRight = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>';
 ?>
 
 <!DOCTYPE html>
@@ -155,40 +162,55 @@ $queryString = http_build_query($queryParams);
     <?php renderNav(); ?>
 
     <div class="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-        <h1 class="text-2xl font-bold text-white mb-6">Welcome back, <?= $_SESSION["username"] ?>!</h1>
+        <h1 class="text-2xl font-bold text-white mb-6">Welcome back, <?= e($_SESSION["username"]) ?>!</h1>
 
         <!-- Summary Cards -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-8">
             <div class="bg-[#111827] rounded-xl p-4 sm:p-5 border border-slate-700">
-                <p class="text-slate-400 text-xs sm:text-sm mb-1">Total Income</p>
+                <div class="flex items-center gap-2 mb-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg>
+                    <p class="text-slate-400 text-xs sm:text-sm">Total Income</p>
+                </div>
                 <p class="text-xl sm:text-2xl font-bold text-emerald-400">₱<?= number_format($totalIncome, 2) ?></p>
             </div>
             <div class="bg-[#111827] rounded-xl p-4 sm:p-5 border border-slate-700">
-                <p class="text-slate-400 text-xs sm:text-sm mb-1">Total Expenses</p>
+                <div class="flex items-center gap-2 mb-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 13l-5 5m0 0l-5-5m5 5V6"/></svg>
+                    <p class="text-slate-400 text-xs sm:text-sm">Total Expenses</p>
+                </div>
                 <p class="text-xl sm:text-2xl font-bold text-rose-400">₱<?= number_format($totalExpense, 2) ?></p>
             </div>
             <div class="bg-[#111827] rounded-xl p-4 sm:p-5 border border-slate-700">
-                <p class="text-slate-400 text-xs sm:text-sm mb-1">Balance</p>
+                <div class="flex items-center gap-2 mb-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg>
+                    <p class="text-slate-400 text-xs sm:text-sm">Balance</p>
+                </div>
                 <p class="text-xl sm:text-2xl font-bold <?= $balance >= 0 ? 'text-white' : 'text-rose-400' ?>">
                     ₱<?= number_format($balance, 2) ?>
                 </p>
             </div>
             <div class="bg-[#111827] rounded-xl p-4 sm:p-5 border border-slate-700">
-                <p class="text-slate-400 text-xs sm:text-sm mb-1">This Month</p>
+                <div class="flex items-center gap-2 mb-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                    <p class="text-slate-400 text-xs sm:text-sm">This Month</p>
+                </div>
                 <p class="text-xl sm:text-2xl font-bold text-indigo-400">₱<?= number_format($monthTotal, 2) ?></p>
             </div>
         </div>
 
         <!-- Category Breakdown -->
         <div class="bg-[#111827] rounded-xl border border-slate-700 p-4 sm:p-5 mb-8">
-            <h2 class="text-lg font-semibold text-white mb-4">Spending by Category</h2>
+            <h2 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+                Spending by Category
+            </h2>
             <?php if (count($categoryTotals) === 0): ?>
                 <p class="text-slate-400 text-sm">No expense data yet.</p>
             <?php else: ?>
                 <div class="space-y-3">
                     <?php foreach ($categoryTotals as $cat): ?>
                         <div class="flex items-center justify-between py-2 border-b border-slate-700 last:border-0">
-                            <span class="text-slate-300 text-sm"><?= $cat["name"] ?></span>
+                            <span class="text-slate-300 text-sm"><?= e($cat["name"]) ?></span>
                             <span class="text-rose-400 font-semibold text-sm">₱<?= number_format($cat["total"], 2) ?></span>
                         </div>
                     <?php endforeach; ?>
@@ -199,14 +221,20 @@ $queryString = http_build_query($queryParams);
         <!-- Records List -->
         <div class="bg-[#111827] rounded-xl border border-slate-700 p-4 sm:p-5">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="text-lg font-semibold text-white">All Records</h2>
-                <a href="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition-colors">+ Add Record</a>
+                <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                    All Records
+                </h2>
+                <a href="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                    Add Record
+                </a>
             </div>
 
             <!-- Search and Filter -->
             <form action="index.php" method="GET" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
                 <input type="text" name="search" placeholder="Search description..."
-                    value="<?= htmlspecialchars($search) ?>"
+                    value="<?= e($search) ?>"
                     class="bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm">
 
                 <select name="type"
@@ -220,8 +248,8 @@ $queryString = http_build_query($queryParams);
                     class="bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 text-sm">
                     <option value="">All Categories</option>
                     <?php foreach ($categories as $category): ?>
-                        <option value="<?= $category["id"] ?>" <?= $filterCategory == $category["id"] ? "selected" : "" ?>>
-                            <?= $category["name"] ?>
+                        <option value="<?= (int)$category["id"] ?>" <?= $filterCategory == $category["id"] ? "selected" : "" ?>>
+                            <?= e($category["name"]) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
@@ -229,7 +257,7 @@ $queryString = http_build_query($queryParams);
                 <div class="flex gap-2 items-center">
                     <label class="text-slate-400 text-sm whitespace-nowrap">From:</label>
                     <div class="relative w-full cursor-pointer">
-                        <input type="text" id="dateFrom" name="date_from" value="<?= htmlspecialchars($filterDateFrom) ?>" placeholder="YYYY-MM-DD"
+                        <input type="text" id="dateFrom" name="date_from" value="<?= e($filterDateFrom) ?>" placeholder="YYYY-MM-DD"
                             class="w-full bg-[#0a0f1e] border border-slate-700 rounded-lg pl-3 pr-8 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 text-sm cursor-pointer">
                         <div class="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-indigo-400">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -242,7 +270,7 @@ $queryString = http_build_query($queryParams);
                 <div class="flex gap-2 items-center">
                     <label class="text-slate-400 text-sm whitespace-nowrap">To:</label>
                     <div class="relative w-full cursor-pointer">
-                        <input type="text" id="dateTo" name="date_to" value="<?= htmlspecialchars($filterDateTo) ?>" placeholder="YYYY-MM-DD"
+                        <input type="text" id="dateTo" name="date_to" value="<?= e($filterDateTo) ?>" placeholder="YYYY-MM-DD"
                             class="w-full bg-[#0a0f1e] border border-slate-700 rounded-lg pl-3 pr-8 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 text-sm cursor-pointer">
                         <div class="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-indigo-400">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -254,7 +282,8 @@ $queryString = http_build_query($queryParams);
 
                 <div class="flex gap-2">
                     <button type="submit"
-                        class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors">
+                        class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
                         Filter
                     </button>
                     <a href="index.php"
@@ -293,7 +322,7 @@ $queryString = http_build_query($queryParams);
                             <?php foreach ($expenses as $expense): ?>
                                 <?php $isRecurringSeries = $expense['is_recurring'] || !empty($expense['parent_id']); ?>
                                 <tr class="hover:bg-slate-800/30 transition-colors">
-                                    <td class="py-3 pr-4 text-slate-400 whitespace-nowrap"><?= $expense["date"] ?></td>
+                                    <td class="py-3 pr-4 text-slate-400 whitespace-nowrap"><?= e($expense["date"]) ?></td>
                                     <td class="py-3 pr-4 whitespace-nowrap">
                                         <span class="text-xs px-2.5 py-1 rounded-full <?= $expense['type'] == 'income' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20' ?>">
                                             <?= ucfirst($expense['type']) ?>
@@ -301,14 +330,14 @@ $queryString = http_build_query($queryParams);
                                     </td>
                                     <td class="py-3 pr-4 whitespace-nowrap">
                                         <span class="bg-indigo-500/10 text-indigo-400 text-xs px-2.5 py-1 rounded-full border border-indigo-500/20">
-                                            <?= htmlspecialchars($expense["category_name"]) ?>
+                                            <?= e($expense["category_name"]) ?>
                                         </span>
                                     </td>
                                     <td class="py-3 pr-4 text-slate-300 max-w-[180px] truncate">
-                                        <?= htmlspecialchars($expense["description"] ?: "—") ?>
+                                        <?= e($expense["description"] ?: "—") ?>
                                         <?php if ($isRecurringSeries): ?>
-                                            <span class="inline-flex items-center text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded ml-1 font-medium" title="Recurring record">
-                                                🔄 Recurring
+                                            <span class="inline-flex items-center gap-1 text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded ml-1 font-medium" title="Recurring record">
+                                                <?= $refreshIcon ?> Recurring
                                             </span>
                                         <?php endif; ?>
                                     </td>
@@ -316,14 +345,14 @@ $queryString = http_build_query($queryParams);
                                         <?= $expense['type'] == 'income' ? '+' : '-' ?>₱<?= number_format($expense["amount"], 2) ?>
                                     </td>
                                     <td class="py-3 text-right whitespace-nowrap">
-                                        <a href="edit.php?id=<?= $expense["id"] ?>" class="text-slate-400 hover:text-white mr-2.5 transition-colors text-xs">Edit</a>
-                                        <a href="delete.php?id=<?= $expense["id"] ?>"
+                                        <a href="edit.php?id=<?= $expense["id"] ?>" class="text-slate-400 hover:text-white mr-2 transition-colors text-xs inline-flex items-center gap-1"><?= $editIcon ?> Edit</a>
+                                        <a href="delete.php?id=<?= $expense["id"] ?><?= getCsrfQueryParam() ?>"
                                            onclick="return confirm('Delete this record?')"
-                                           class="text-rose-400 hover:text-rose-300 transition-colors text-xs">Delete</a>
+                                           class="text-rose-400 hover:text-rose-300 transition-colors text-xs inline-flex items-center gap-1"><?= $trashIcon ?> Delete</a>
                                         <?php if ($isRecurringSeries): ?>
-                                            <a href="delete.php?id=<?= $expense["id"] ?>&mode=all"
+                                            <a href="delete.php?id=<?= $expense["id"] ?>&mode=all<?= getCsrfQueryParam() ?>"
                                                onclick="return confirm('Delete this record AND all other entries in this recurring series from your dashboard?')"
-                                               class="text-rose-400 hover:text-rose-300 transition-colors text-xs bg-rose-500/10 border border-rose-500/30 px-2 py-1 rounded ml-2">Delete Series</a>
+                                               class="text-rose-400 hover:text-rose-300 transition-colors text-xs bg-rose-500/10 border border-rose-500/30 px-2 py-1 rounded ml-2 inline-flex items-center gap-1"><?= $trashIcon ?> Series</a>
                                         <?php endif; ?>
                                     </td>
                                 </tr>
@@ -340,9 +369,9 @@ $queryString = http_build_query($queryParams);
                             <div class="flex items-start justify-between gap-2">
                                 <div>
                                     <p class="font-semibold text-white text-base">
-                                        <?= htmlspecialchars($expense["description"] ?: ($expense["category_name"] . " " . ucfirst($expense["type"]))) ?>
+                                        <?= e($expense["description"] ?: ($expense["category_name"] . " " . ucfirst($expense["type"]))) ?>
                                     </p>
-                                    <p class="text-xs text-slate-400 mt-0.5"><?= $expense["date"] ?></p>
+                                    <p class="text-xs text-slate-400 mt-0.5"><?= e($expense["date"]) ?></p>
                                 </div>
                                 <span class="font-bold text-base <?= $expense['type'] == 'income' ? 'text-emerald-400' : 'text-rose-400' ?>">
                                     <?= $expense['type'] == 'income' ? '+' : '-' ?>₱<?= number_format($expense["amount"], 2) ?>
@@ -354,20 +383,20 @@ $queryString = http_build_query($queryParams);
                                     <?= ucfirst($expense['type']) ?>
                                 </span>
                                 <span class="bg-indigo-500/10 text-indigo-400 text-xs px-2.5 py-0.5 rounded-full border border-indigo-500/20">
-                                    <?= htmlspecialchars($expense["category_name"]) ?>
+                                    <?= e($expense["category_name"]) ?>
                                 </span>
                                 <?php if ($isRecurringSeries): ?>
-                                    <span class="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded font-medium">
-                                        🔄 Recurring
+                                    <span class="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-1">
+                                        <?= $refreshIcon ?> Recurring
                                     </span>
                                 <?php endif; ?>
                             </div>
 
                             <div class="flex items-center justify-end gap-3 pt-2 text-xs border-t border-slate-800/80">
-                                <a href="edit.php?id=<?= $expense["id"] ?>" class="bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700">Edit</a>
-                                <a href="delete.php?id=<?= $expense["id"] ?>" onclick="return confirm('Delete this record?')" class="text-rose-400 bg-rose-500/10 border border-rose-500/30 px-3 py-1.5 rounded-lg">Delete</a>
+                                <a href="edit.php?id=<?= $expense["id"] ?>" class="bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 inline-flex items-center gap-1.5"><?= $editIcon ?> Edit</a>
+                                <a href="delete.php?id=<?= $expense["id"] ?><?= getCsrfQueryParam() ?>" onclick="return confirm('Delete this record?')" class="text-rose-400 bg-rose-500/10 border border-rose-500/30 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5"><?= $trashIcon ?> Delete</a>
                                 <?php if ($isRecurringSeries): ?>
-                                    <a href="delete.php?id=<?= $expense["id"] ?>&mode=all" onclick="return confirm('Delete this record AND all other entries in this recurring series?')" class="text-rose-400 bg-rose-500/10 border border-rose-500/30 px-3 py-1.5 rounded-lg">Delete Series</a>
+                                    <a href="delete.php?id=<?= $expense["id"] ?>&mode=all<?= getCsrfQueryParam() ?>" onclick="return confirm('Delete this record AND all other entries in this recurring series?')" class="text-rose-400 bg-rose-500/10 border border-rose-500/30 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5"><?= $trashIcon ?> Series</a>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -383,8 +412,8 @@ $queryString = http_build_query($queryParams);
                         <div class="flex flex-wrap gap-2">
                             <?php if ($currentPage > 1): ?>
                                 <a href="?page=<?= $currentPage - 1 ?>&<?= $queryString ?>"
-                                    class="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
-                                    ← Prev
+                                    class="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1.5">
+                                    <?= $chevronLeft ?> Prev
                                 </a>
                             <?php endif; ?>
 
@@ -397,8 +426,8 @@ $queryString = http_build_query($queryParams);
 
                             <?php if ($currentPage < $totalPages): ?>
                                 <a href="?page=<?= $currentPage + 1 ?>&<?= $queryString ?>"
-                                    class="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
-                                    Next →
+                                    class="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-1.5">
+                                    Next <?= $chevronRight ?>
                                 </a>
                             <?php endif; ?>
                         </div>

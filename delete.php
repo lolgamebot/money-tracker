@@ -11,6 +11,9 @@ if (!isset($_GET["id"])) {
     exit;
 }
 
+// Verify CSRF token for all delete actions
+verifyCsrfGet();
+
 $expenseId = (int)$_GET["id"];
 $mode = $_GET["mode"] ?? "single";
 

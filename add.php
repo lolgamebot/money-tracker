@@ -11,6 +11,7 @@ $getCategories->execute([$userId]);
 $categories = $getCategories->fetchAll();
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    verifyCsrfToken();
     $amount = $_POST["amount"];
     $categoryId = $_POST["category_id"];
     $description = $_POST["description"];
@@ -130,6 +131,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <?php else: ?>
             <div class="bg-[#111827] rounded-xl border border-slate-700 p-6">
                 <form action="add.php" method="POST" class="space-y-5">
+                    <?php renderCsrfInput(); ?>
 
                     <div>
                         <label class="block text-sm font-medium text-slate-400 mb-1">Type</label>

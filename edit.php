@@ -27,6 +27,7 @@ $getCategories->execute([$userId]);
 $categories = $getCategories->fetchAll();
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    verifyCsrfToken();
     $amount = $_POST["amount"];
     $categoryId = $_POST["category_id"];
     $description = $_POST["description"];
@@ -80,6 +81,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $isRecurring, $recurringInterval, $recurringEndDate, 
             $expenseId, $userId
         ]);
+
+        // Propagate amount/category/type/description changes to already-generated
+        // child records, keeping each child's own date untouched.
+        $updateChildren = $pdo->prepare("
+            UPDATE expenses
+            SET amount=?, category_id=?, type=?, description=?
+            WHERE parent_id=? AND user_id=?
+        ");
+        $updateChildren->execute([
+            $amount, $categoryId, $type, $description,
+            $expenseId, $userId
+        ]);
+
         header("Location: index.php");
         exit;
     }
@@ -138,6 +152,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         <div class="bg-[#111827] rounded-xl border border-slate-700 p-6">
             <form action="edit.php?id=<?= $expenseId ?>" method="POST" class="space-y-5">
+                <?php renderCsrfInput(); ?>
                 <div>
                     <label class="block text-sm font-medium text-slate-400 mb-1">Type</label>
                     <select name="type" required
