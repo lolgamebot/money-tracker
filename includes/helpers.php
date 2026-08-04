@@ -27,6 +27,24 @@ function initSecureSession() {
         ini_set('session.cookie_samesite', 'Lax');
         session_start();
     }
+
+    // Session inactivity timeout (auto-logout after 30 minutes idle)
+    $timeout = 60 * 30; // 30 minutes
+    if (isset($_SESSION['user_id']) && isset($_SESSION['last_activity'])) {
+        if (time() - $_SESSION['last_activity'] > $timeout) {
+            // Session expired — destroy it, then regenerate the session ID
+            session_unset();
+            session_destroy();
+            session_start();
+            session_regenerate_id(true);
+            // Set the expired flag so the next request can show the re-auth prompt
+            $_SESSION['session_expired'] = true;
+        } else {
+            $_SESSION['last_activity'] = time();
+        }
+    } elseif (isset($_SESSION['user_id'])) {
+        $_SESSION['last_activity'] = time();
+    }
 }
 
 function requireLogin() {
@@ -100,9 +118,23 @@ function verifyCsrfGet() {
 /**
  * Render error/success alert blocks.
  * Accepts a single message or an array of messages for each type.
- * Success messages are NOT escaped (may contain trusted HTML like links).
+ * All shared alert content is HTML-escaped by default.
  */
 function renderAlerts($errors = [], $successes = []) {
+    foreach ((array)$errors as $msg) {
+        if ($msg !== null && $msg !== '') {
+            echo '<div class="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg px-4 py-3 mb-6 text-sm">' . e($msg) . '</div>';
+        }
+    }
+    foreach ((array)$successes as $msg) {
+        if ($msg !== null && $msg !== '') {
+            echo '<div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-lg px-4 py-3 mb-6 text-sm" data-auto-dismiss>' . e($msg) . '</div>';
+        }
+    }
+}
+
+/** Render trusted HTML success alerts only for callers that intentionally allow markup. */
+function renderTrustedAlerts($errors = [], $successes = []) {
     foreach ((array)$errors as $msg) {
         if ($msg !== null && $msg !== '') {
             echo '<div class="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg px-4 py-3 mb-6 text-sm">' . e($msg) . '</div>';
@@ -120,7 +152,7 @@ function renderFlash($key = 'flash_success') {
     if (isset($_SESSION[$key])) {
         $msg = $_SESSION[$key];
         unset($_SESSION[$key]);
-        echo '<div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-lg px-4 py-3 mb-6 text-sm flex items-center justify-between" data-auto-dismiss><span>' . $msg . '</span></div>';
+        echo '<div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-lg px-4 py-3 mb-6 text-sm flex items-center justify-between" data-auto-dismiss><span>' . e($msg) . '</span></div>';
     }
 }
 
@@ -185,12 +217,12 @@ function renderHeader($title, $opts = []) {
 
     $libs = '';
     if ($opts['flatpickr']) {
-        $libs .= "\n    " . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">'
-              . "\n    " . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">'
-              . "\n    " . '<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>';
+        $libs .= "\n    " . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" integrity="sha384-REPLACE_WITH_SHA384" crossorigin="anonymous">'
+              . "\n    " . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/themes/dark.css" integrity="sha384-REPLACE_WITH_SHA384" crossorigin="anonymous">'
+              . "\n    " . '<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js" integrity="sha384-REPLACE_WITH_SHA384" crossorigin="anonymous"></script>';
     }
     if ($opts['chartjs']) {
-        $libs .= "\n    " . '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';
+        $libs .= "\n    " . '<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" integrity="sha384-REPLACE_WITH_SHA384" crossorigin="anonymous"></script>';
     }
 
     echo '<!DOCTYPE html>
@@ -360,10 +392,15 @@ function getCategories($pdo, $userId) {
 function computeRecurringEndDate($startDate, $interval, $endCondition, $input = []) {
     $endDate = null;
     $start = new DateTime($startDate);
+    $allowedIntervals = ['daily', 'weekly', 'monthly', 'yearly'];
 
     if ($endCondition === "date" && !empty($input["recurring_end_date"])) {
         $endDate = $input["recurring_end_date"];
     } elseif ($endCondition === "occurrences") {
+        if (!in_array($interval, $allowedIntervals, true)) {
+            return null;
+        }
+
         $count = max(1, (int)($input["occurrences_count"] ?? 1));
         $step = $count - 1;
         $d = clone $start;
@@ -378,12 +415,308 @@ function computeRecurringEndDate($startDate, $interval, $endCondition, $input = 
         $endDate = $d->format('Y-m-d');
     } elseif ($endCondition === "period") {
         $num = max(1, (int)($input["period_num"] ?? 1));
-        $unit = $input["period_unit"] ?? "months";
-        $d = clone $start;
-        $d->modify("+$num $unit");
-        $endDate = $d->format('Y-m-d');
+        $unit = $input["period_unit"] ?? 'months';
+        $allowedUnits = ['day', 'days', 'week', 'weeks', 'month', 'months', 'year', 'years'];
+        if (!in_array($unit, $allowedUnits, true)) {
+            $unit = 'months';
+        }
+
     }
 
-    return $endDate;
+return $endDate;
+}
+
+// ---------------------------------------------------------------------
+//  Error Logging
+// ---------------------------------------------------------------------
+
+/**
+ * Append a message to the logs/error.log file (auto-creates the directory).
+ * Returns false if logging fails.
+ */
+function logError($message) {
+    $documentRoot = realpath($_SERVER['DOCUMENT_ROOT'] ?? '') ?: '';
+    $logDir = dirname(__DIR__, 3) . '/logs';
+    $logDir = realpath($logDir) ?: $logDir;
+
+    if ($documentRoot !== '' && strpos(realpath($logDir) ?: $logDir, $documentRoot) === 0) {
+        $logDir = sys_get_temp_dir() . '/moneytracker-logs';
+    }
+
+    if (!is_dir($logDir)) {
+        @mkdir($logDir, 0775, true);
+    }
+
+    $logFile = $logDir . '/error.log';
+    $maxBytes = 1024 * 1024;
+    if (is_file($logFile) && filesize($logFile) > $maxBytes) {
+        @rename($logFile, $logFile . '.' . date('YmdHis'));
+    }
+
+    $line = '[' . date('Y-m-d H:i:s') . '] ' . $message . PHP_EOL;
+    $handle = @fopen($logFile, 'ab');
+    if (!$handle) {
+        return false;
+    }
+
+    if (!@flock($handle, LOCK_EX)) {
+        @fclose($handle);
+        return false;
+    }
+
+    $written = @fwrite($handle, $line);
+    @flock($handle, LOCK_UN);
+    @fclose($handle);
+
+    return $written !== false;
+}
+
+// ---------------------------------------------------------------------
+//  Password Strength
+// ---------------------------------------------------------------------
+
+/**
+ * Compute a password strength score 0-4 based on length and character
+ * variety. Used by the client-side meter and the server-side check.
+ */
+function passwordStrengthScore($password) {
+    $score = 0;
+    if (strlen($password) >= 8) {
+        $score++;
+    }
+    if (preg_match('/[A-Z]/', $password)) {
+        $score++;
+    }
+    if (preg_match('/[0-9]/', $password)) {
+        $score++;
+    }
+    if (preg_match('/[^A-Za-z0-9]/', $password)) {
+        $score++;
+    }
+    return $score;
+}
+
+// ---------------------------------------------------------------------
+//  Upcoming Bills / Payments
+// ---------------------------------------------------------------------
+
+/**
+ * Check whether a column exists in a table (cached per request).
+ * Used to gracefully degrade the upcoming-bills feature when the
+ * schema has not yet been updated (e.g. missing `paid` column).
+ */
+function columnExists($pdo, $table, $column) {
+    static $cache = [];
+    $key = $table . '.' . $column;
+    if (!isset($cache[$key])) {
+        try {
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?
+            ");
+            $stmt->execute([$table, $column]);
+            $cache[$key] = (int)$stmt->fetchColumn() > 0;
+        } catch (PDOException $e) {
+            $cache[$key] = false;
+        }
+    }
+    return $cache[$key];
+}
+
+/**
+ * Fetch "upcoming bills" for the current month.
+ *
+ * A bill is a future-dated expense due in the current month, OR a
+ * recurring template whose next occurrence falls in the current month.
+ *
+ * Returns an array of bill rows with an extra `paid` flag and a
+ * `source` field ('oneoff' | 'recurring') and `parent_id` for recurring.
+ */
+function getUpcomingBills($pdo, $userId) {
+    // If the `paid` column hasn't been added (schema not updated), the
+    // upcoming-bills feature isn't available yet — return empty gracefully.
+    if (!columnExists($pdo, 'expenses', 'paid')) {
+        return [];
+    }
+
+    $today = date('Y-m-d');
+    $monthStart = date('Y-m-01');
+    $monthEnd   = date('Y-m-t');
+
+    $bills = [];
+
+    // 1) One-off future-dated expenses in the current month
+    $stmt = $pdo->prepare("
+        SELECT e.*, c.name AS category_name, 'oneoff' AS source
+        FROM expenses e
+        LEFT JOIN categories c ON e.category_id = c.id
+        WHERE e.user_id = ?
+          AND e.type = 'expense'
+          AND e.is_recurring = 0
+          AND e.parent_id IS NULL
+          AND e.date >= ?
+          AND e.date <= ?
+        ORDER BY e.date ASC
+    ");
+    $stmt->execute([$userId, $today, $monthEnd]);
+    $bills = array_merge($bills, $stmt->fetchAll());
+
+    // 2) Recurring templates whose next occurrence lands in the current month
+    $getRecurring = $pdo->prepare("
+        SELECT e.*, c.name AS category_name, 'recurring' AS source
+        FROM expenses e
+        LEFT JOIN categories c ON e.category_id = c.id
+        WHERE e.user_id = ?
+          AND e.type = 'expense'
+          AND e.is_recurring = 1
+        ORDER BY e.date ASC
+    ");
+    $getRecurring->execute([$userId]);
+    $templates = $getRecurring->fetchAll();
+
+    $stepMap = [
+        'daily'   => '+1 day',
+        'weekly'  => '+1 week',
+        'monthly' => '+1 month',
+        'yearly'  => '+1 year',
+    ];
+
+    foreach ($templates as $tpl) {
+        $interval = $tpl['recurring_interval'];
+        if (empty($interval) || !isset($stepMap[$interval])) {
+            continue;
+        }
+
+        $startDate = new DateTime($tpl['date']);
+        $nextDate  = clone $startDate;
+
+        // If the start date is in the future (this month), bill due at start date
+        if ($tpl['date'] >= $today && $tpl['date'] <= $monthEnd) {
+            $nextDate = $startDate;
+        } else {
+            // Advance to the first occurrence >= today
+            $nextDate->modify($stepMap[$interval]);
+            while ($nextDate->format('Y-m-d') < $today) {
+                $nextDate->modify($stepMap[$interval]);
+            }
+        }
+
+        $dueDate = $nextDate->format('Y-m-d');
+
+        // Only include if the next occurrence is within the current month
+        if ($dueDate >= $monthStart && $dueDate <= $monthEnd) {
+            // Check whether this specific occurrence has already been generated
+            // and marked paid (look for a child entry with this date).
+            $paid = 0;
+            $checkChild = $pdo->prepare("
+                SELECT paid FROM expenses
+                WHERE user_id = ? AND parent_id = ? AND date = ?
+                LIMIT 1
+            ");
+            $checkChild->execute([$userId, $tpl['id'], $dueDate]);
+            $child = $checkChild->fetch();
+            if ($child) {
+                $paid = (int)$child['paid'];
+            }
+
+            $bills[] = array_merge($tpl, [
+                'source'       => 'recurring',
+                'date'         => $dueDate,
+                'billed'       => $dueDate, // occurrence date for this month
+                'paid'         => $paid,
+                'parent_id'    => $tpl['id'],
+                'is_recurring' => 1,
+            ]);
+        }
+    }
+
+    // Sort by date ascending
+    usort($bills, function ($a, $b) {
+        return strcmp($a['date'], $b['date']);
+    });
+
+    return $bills;
+}
+
+/** Mark a bill as paid (or unmark) for the current month. */
+function markBillPaid($pdo, $userId, $billId, $paid = true) {
+    // If the `paid` column hasn't been added (schema not updated), nothing to do.
+    if (!columnExists($pdo, 'expenses', 'paid')) {
+        return false;
+    }
+
+    // For recurring templates, we mark the child occurrence for the current month.
+    // $billId is the parent template id; we find/create the child for the current month.
+    $stmt = $pdo->prepare("
+        SELECT * FROM expenses WHERE id = ? AND user_id = ?
+    ");
+    $stmt->execute([$billId, $userId]);
+    $bill = $stmt->fetch();
+
+    if (!$bill) {
+        return false;
+    }
+
+    if ($bill['is_recurring']) {
+        // Find the child occurrence for the current month
+        $today = new DateTime('today');
+        $startDate = new DateTime($bill['date']);
+        $stepMap = [
+            'daily'   => '+1 day',
+            'weekly'  => '+1 week',
+            'monthly' => '+1 month',
+            'yearly'  => '+1 year',
+        ];
+        $interval = $bill['recurring_interval'];
+        if (empty($interval) || !isset($stepMap[$interval])) {
+            return false;
+        }
+
+        $nextDate = clone $startDate;
+        if ($bill['date'] >= date('Y-m-d') && $bill['date'] <= date('Y-m-t')) {
+            $nextDate = $startDate;
+        } else {
+            $nextDate->modify($stepMap[$interval]);
+            while ($nextDate->format('Y-m-d') < date('Y-m-d')) {
+                $nextDate->modify($stepMap[$interval]);
+            }
+        }
+
+        $occurrenceDate = $nextDate->format('Y-m-d');
+
+        // Check if a child exists for this occurrence
+        $checkChild = $pdo->prepare("
+            SELECT id FROM expenses WHERE user_id = ? AND parent_id = ? AND date = ?
+        ");
+        $checkChild->execute([$userId, $bill['id'], $occurrenceDate]);
+        $child = $checkChild->fetch();
+
+        if ($child) {
+            $updateChild = $pdo->prepare("
+                UPDATE expenses SET paid = ?, paid_at = ? WHERE id = ?
+            ");
+            $updateChild->execute([$paid ? 1 : 0, $paid ? date('Y-m-d H:i:s') : null, $child['id']]);
+        } else {
+            // Create a child occurrence and mark it paid
+            $insertChild = $pdo->prepare("
+                INSERT INTO expenses
+                (user_id, category_id, amount, type, description, date, is_recurring, recurring_interval, recurring_end_date, parent_id, paid, paid_at)
+                VALUES (?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?, ?, ?)
+            ");
+            $insertChild->execute([
+                $userId, $bill['category_id'], $bill['amount'], $bill['type'],
+                $bill['description'], $occurrenceDate, $bill['id'],
+                $paid ? 1 : 0, $paid ? date('Y-m-d H:i:s') : null
+            ]);
+        }
+        return true;
+    }
+
+    // One-off expense: just flip the paid flag
+    $updateOneOff = $pdo->prepare("
+        UPDATE expenses SET paid = ?, paid_at = ? WHERE id = ? AND user_id = ?
+    ");
+    $updateOneOff->execute([$paid ? 1 : 0, $paid ? date('Y-m-d H:i:s') : null, $bill['id'], $userId]);
+    return true;
 }
 

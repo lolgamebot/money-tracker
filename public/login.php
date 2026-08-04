@@ -11,13 +11,44 @@ if (isset($_SESSION["user_id"])) {
 
 $errors = [];
 
+// --- Login rate limiting (per username) --------------------------------
+$MAX_ATTEMPTS = 5;
+$LOCKOUT_TIME = 15 * 60; // 15 minutes
+$isLockedOut  = false;
+$lockRemaining = 0;
+$ipAddress = $_SERVER['REMOTE_ADDR'] ?? '';
+
+// The rate-limiting feature depends on the `login_attempts` table, which
+// may not exist until the schema update is applied. Gracefully skip it.
+$rateLimitEnabled = columnExists($pdo, 'login_attempts', 'id');
+
+if ($rateLimitEnabled && isset($_POST['username'])) {
+    $checkUsername = trim($_POST['username']);
+    if ($checkUsername !== '') {
+        $attemptStmt = $pdo->prepare("
+            SELECT COUNT(*) FROM login_attempts
+            WHERE username = ?
+              AND attempted_at > (NOW() - INTERVAL 900 SECOND)
+        ");
+        $attemptStmt->execute([$checkUsername]);
+        $failCount = (int)$attemptStmt->fetchColumn();
+
+        if ($failCount >= $MAX_ATTEMPTS) {
+            $isLockedOut = true;
+            $lockRemaining = $LOCKOUT_TIME;
+        }
+    }
+}
+
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     verifyCsrfToken();
 
     $username = trim($_POST["username"] ?? "");
     $password = $_POST["password"] ?? "";
 
-    if (empty($username) || empty($password)) {
+    if ($isLockedOut) {
+        $errors[] = "Too many failed login attempts. Please try again in 15 minutes.";
+    } elseif (empty($username) || empty($password)) {
         $errors[] = "Please fill in all fields!";
     } else {
         $findAccount = $pdo->prepare("SELECT * FROM accounts WHERE username = ?");
@@ -43,11 +74,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             }
         }
 
-        if ($authenticated) {
+if ($authenticated) {
+            // Clear any previous failed attempt records for this username (if rate-limiting is enabled)
+            if ($rateLimitEnabled) {
+                $clearAttempts = $pdo->prepare("DELETE FROM login_attempts WHERE username = ?");
+                $clearAttempts->execute([$username]);
+            }
+
             session_regenerate_id(true);
 
             $_SESSION["user_id"]  = $account["id"];
             $_SESSION["username"] = $account["username"];
+            $_SESSION["last_activity"] = time();
 
             require "process_recurring.php";
             processRecurring($pdo, $account["id"]);
@@ -55,7 +93,29 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             header("Location: index.php");
             exit;
         } else {
-            $errors[] = "Invalid username or password!";
+            $errCount = "Invalid username or password!";
+
+            if ($rateLimitEnabled) {
+                // Record a failed attempt
+                $recordAttempt = $pdo->prepare("INSERT INTO login_attempts (username, ip_address) VALUES (?, ?)");
+                $recordAttempt->execute([$username, $ipAddress]);
+
+                // Show remaining attempts before lockout
+                $attemptStmt = $pdo->prepare("
+                    SELECT COUNT(*) FROM login_attempts
+                    WHERE username = ? AND attempted_at > (NOW() - INTERVAL 900 SECOND)
+                ");
+                $attemptStmt->execute([$username]);
+                $cnt = (int)$attemptStmt->fetchColumn();
+                $remaining = max(0, $MAX_ATTEMPTS - $cnt);
+                if ($remaining > 0) {
+                    $errCount .= " You have $remaining attempt(s) left before lockout.";
+                } else {
+                    $errCount = "Too many failed login attempts. Please try again in 15 minutes.";
+                }
+            }
+
+            $errors[] = $errCount;
         }
     }
 }

@@ -1,5 +1,4 @@
 <?php
-session_start();
 require "../config/db.php";
 require "../includes/helpers.php";
 requireLogin();
@@ -31,9 +30,10 @@ if ($mode === "all") {
     $parentId = $expense["is_recurring"] ? $expense["id"] : $expense["parent_id"];
     
     if ($parentId) {
-        // Delete parent template and all generated children in series
-        $deleteSeries = $pdo->prepare("DELETE FROM expenses WHERE user_id = ? AND (id = ? OR parent_id = ?)");
-        $deleteSeries->execute([$userId, $parentId, $parentId]);
+        // Delete ONLY the recurring template. This stops all future automatic
+        // generation, while already-generated dashboard records remain intact.
+        $deleteTemplate = $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ?");
+        $deleteTemplate->execute([$parentId, $userId]);
     } else {
         // Fallback to single delete if no parent ID found
         $deleteExpense = $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ?");

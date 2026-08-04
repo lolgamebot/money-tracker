@@ -14,6 +14,10 @@ try {
         PDO::ATTR_EMULATE_PREPARES => false,
     ]);
 } catch (PDOException $e) {
+    // Attempt to log the specific error (best-effort) without exposing details
+    if (function_exists('logError')) {
+        logError('DB connection failed: ' . $e->getMessage());
+    }
     die("Database Connection Error. Please verify database settings and try again.");
 }
 ?>

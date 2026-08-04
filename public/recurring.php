@@ -1,7 +1,4 @@
 <?php
-ini_set('session.cookie_httponly', 1);
-ini_set('session.use_only_cookies', 1);
-session_start();
 require "../config/db.php";
 require "../includes/helpers.php";
 requireLogin();
@@ -23,13 +20,22 @@ if (isset($_GET["cancel"])) {
     exit;
 }
 
-// Handle delete all records (CSRF-protected)
+// Handle "delete series" (CSRF-protected): removes the recurring template
+// and future pending occurrences, but keeps already-generated past records.
 if (isset($_GET["delete_all"])) {
     verifyCsrfGet();
     $deleteId = (int)$_GET["delete_all"];
-    $deleteAll = $pdo->prepare("DELETE FROM expenses WHERE user_id = ? AND (id = ? OR parent_id = ?)");
-    $deleteAll->execute([$userId, $deleteId, $deleteId]);
-    setFlash("Deleted recurring template and all associated dashboard records.");
+
+    // Delete the recurring template itself (stops future generation)
+    $deleteTemplate = $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ?");
+    $deleteTemplate->execute([$deleteId, $userId]);
+
+    // Also delete any generated child records whose date is in the future
+    // (upcoming), leaving past records intact.
+    $deleteFuture = $pdo->prepare("DELETE FROM expenses WHERE user_id = ? AND parent_id = ? AND date >= ?");
+    $deleteFuture->execute([$userId, $deleteId, date('Y-m-d')]);
+
+    setFlash("Deleted recurring template and upcoming records. Past records remain intact.");
     header("Location: recurring.php");
     exit;
 }
@@ -44,6 +50,20 @@ $getRecurring = $pdo->prepare("
 ");
 $getRecurring->execute([$userId]);
 $recurringRecords = $getRecurring->fetchAll();
+
+// Handle "mark as paid" toggle (CSRF-protected)
+if (isset($_GET["mark_paid"])) {
+    verifyCsrfGet();
+    $billId = (int)$_GET["mark_paid"];
+    $paidToggle = isset($_GET["unpaid"]) ? 0 : 1;
+    markBillPaid($pdo, $userId, $billId, (bool)$paidToggle);
+    setFlash($paidToggle ? "Bill marked as paid!" : "Bill marked as unpaid.");
+    header("Location: recurring.php");
+    exit;
+}
+
+// Upcoming bills for the current month
+$upcomingBills = getUpcomingBills($pdo, $userId);
 
 // Count generated children for each recurring record (single query)
 $generatedCounts = [];
@@ -85,7 +105,60 @@ if (!empty($recurringRecords)) {
             </a>
         </div>
 
-        <?php renderFlash(); ?>
+<?php renderFlash(); ?>
+
+        <!-- Upcoming Bills / Payments This Month -->
+        <div class="bg-[#111827] rounded-xl border border-slate-700 p-4 sm:p-5 mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                    <?= svgIcon('calendar', 'h-5 w-5 text-indigo-400') ?>
+                    Bills Due This Month
+                </h2>
+                <span class="text-slate-400 text-sm"><?= date("F Y") ?></span>
+            </div>
+
+            <?php if (count($upcomingBills) === 0): ?>
+                <p class="text-slate-400 text-sm">No bills due this month. 🎉</p>
+            <?php else: ?>
+                <div class="space-y-2">
+                    <?php foreach ($upcomingBills as $bill): ?>
+                        <?php $isPaid = (bool)$bill["paid"]; ?>
+                        <div class="flex items-center justify-between gap-3 py-2.5 border-b border-slate-800 last:border-0 <?= $isPaid ? 'opacity-60' : '' ?>">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-slate-200 text-sm font-medium truncate">
+                                        <?= e($bill["description"] ?: ($bill["category_name"] . " " . ucfirst($bill["type"]))) ?>
+                                    </p>
+                                    <p class="text-xs text-slate-400">
+                                        <?= e($bill["category_name"] ?: 'Uncategorized') ?> •
+                                        Due <?= date("M j", strtotime($bill["date"])) ?>
+                                        <?php if ($bill["source"] === 'recurring'): ?>
+                                            • <span class="text-indigo-400 inline-flex items-center gap-1"><?= svgIcon('refresh', 'h-3 w-3') ?> Recurring</span>
+                                        <?php endif; ?>
+                                    </p>
+                                </div>
+                                <span class="font-bold text-sm text-rose-400 whitespace-nowrap">₱<?= formatMoney($bill["amount"]) ?></span>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <?php if ($isPaid): ?>
+                                    <span class="inline-flex items-center gap-1 text-emerald-400 text-xs bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded-md font-medium">
+                                        <?= svgIcon('check', 'h-3.5 w-3.5') ?> Paid
+                                    </span>
+                                    <a href="recurring.php?mark_paid=<?= (int)$bill["id"] ?>&unpaid=1<?= getCsrfQueryParam() ?>"
+                                       class="text-slate-400 hover:text-white text-xs transition-colors" title="Mark as unpaid">Undo</a>
+                                <?php else: ?>
+                                    <a href="recurring.php?mark_paid=<?= (int)$bill["id"] ?><?= getCsrfQueryParam() ?>"
+                                       class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5">
+                                        <?= svgIcon('check', 'h-3.5 w-3.5') ?>
+                                        Confirm Paid
+                                    </a>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
 
         <?php if (count($recurringRecords) === 0): ?>
             <div class="bg-[#111827] rounded-xl border border-slate-700 p-8 sm:p-10 text-center">
@@ -162,11 +235,11 @@ if (!empty($recurringRecords)) {
                                                 <?= svgIcon('stop') ?>
                                                 Stop
                                             </a>
-                                            <a href="recurring.php?delete_all=<?= $record["id"] ?><?= getCsrfQueryParam() ?>"
-                                               onclick="return confirm('Are you sure you want to delete this recurring expense AND ALL <?= $count ?> generated record(s) from your dashboard?')"
+<a href="recurring.php?delete_all=<?= $record["id"] ?><?= getCsrfQueryParam() ?>"
+                                               onclick="return confirm('Delete this recurring schedule? It will stop future automatic entries. Past records will remain on your dashboard.')"
                                                class="text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-1.5 rounded-lg font-medium transition-colors inline-flex items-center gap-1.5">
                                                 <?= svgIcon('trash') ?>
-                                                Delete All
+                                                Delete Series
                                             </a>
                                         </div>
                                     </td>
@@ -214,7 +287,7 @@ if (!empty($recurringRecords)) {
                         <div class="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-800/80">
                             <a href="edit.php?id=<?= $record["id"] ?>" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 inline-flex items-center gap-1.5"><?= svgIcon('edit') ?> Edit</a>
                             <a href="recurring.php?cancel=<?= $record["id"] ?><?= getCsrfQueryParam() ?>" onclick="return confirm('Stop recurring schedule? Future entries will stop generating.')" class="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5"><?= svgIcon('stop') ?> Stop</a>
-                            <a href="recurring.php?delete_all=<?= $record["id"] ?><?= getCsrfQueryParam() ?>" onclick="return confirm('Delete this recurring expense AND ALL <?= $count ?> generated records?')" class="text-xs bg-rose-500/10 text-rose-400 border border-rose-500/30 px-3 py-1.5 rounded-lg font-medium inline-flex items-center gap-1.5"><?= svgIcon('trash') ?> Delete All</a>
+<a href="recurring.php?delete_all=<?= $record["id"] ?><?= getCsrfQueryParam() ?>" onclick="return confirm('Delete this recurring schedule? It will stop future automatic entries. Past records will remain.')" class="text-xs bg-rose-500/10 text-rose-400 border border-rose-500/30 px-3 py-1.5 rounded-lg font-medium inline-flex items-center gap-1.5"><?= svgIcon('trash') ?> Delete Series</a>
                         </div>
                     </div>
                 <?php endforeach; ?>

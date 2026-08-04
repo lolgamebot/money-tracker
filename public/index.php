@@ -1,7 +1,4 @@
 <?php
-ini_set('session.cookie_httponly', 1);
-ini_set('session.use_only_cookies', 1);
-session_start();
 require "../config/db.php";
 require "../includes/helpers.php";
 requireLogin();
@@ -95,6 +92,22 @@ $categoryTotals = $getCategoryTotals->fetchAll();
 
 $categories = getCategories($pdo, $userId);
 
+// Handle "mark as paid" toggle (CSRF-protected)
+if (isset($_GET["mark_paid"])) {
+    verifyCsrfGet();
+    $billId = (int)$_GET["mark_paid"];
+    $paidToggle = isset($_GET["unpaid"]) ? 0 : 1;
+    markBillPaid($pdo, $userId, $billId, (bool)$paidToggle);
+    setFlash($paidToggle ? "Bill marked as paid!" : "Bill marked as unpaid.");
+    header("Location: index.php");
+    exit;
+}
+
+// Upcoming bills for the current month
+$upcomingBills = getUpcomingBills($pdo, $userId);
+$unpaidBills = array_filter($upcomingBills, function ($b) { return !$b['paid']; });
+$paidBills   = array_filter($upcomingBills, function ($b) { return $b['paid']; });
+
 // Build query string for pagination links
 $queryString = http_build_query(array_filter([
     "search"      => $search,
@@ -162,6 +175,62 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                         <div class="flex items-center justify-between py-2 border-b border-slate-700 last:border-0">
                             <span class="text-slate-300 text-sm"><?= e($cat["name"]) ?></span>
                             <span class="text-rose-400 font-semibold text-sm">₱<?= formatMoney($cat["total"]) ?></span>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+
+        <!-- Upcoming Bills / Payments -->
+        <div class="bg-[#111827] rounded-xl border border-slate-700 p-4 sm:p-5 mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                    <?= svgIcon('calendar', 'h-5 w-5 text-indigo-400') ?>
+                    Upcoming Bills
+                </h2>
+                <a href="add.php" class="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-colors flex items-center gap-1.5">
+                    <?= svgIcon('plus', 'h-4 w-4') ?>
+                    Add Bill
+                </a>
+            </div>
+
+            <?php if (count($upcomingBills) === 0): ?>
+                <p class="text-slate-400 text-sm">No upcoming bills this month. 🎉</p>
+            <?php else: ?>
+                <div class="space-y-2">
+                    <?php foreach ($upcomingBills as $bill): ?>
+                        <?php $isPaid = (bool)$bill["paid"]; ?>
+                        <div class="flex items-center justify-between gap-3 py-2.5 border-b border-slate-800 last:border-0 <?= $isPaid ? 'opacity-60' : '' ?>">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-slate-200 text-sm font-medium truncate">
+                                        <?= e($bill["description"] ?: ($bill["category_name"] . " " . ucfirst($bill["type"]))) ?>
+                                    </p>
+                                    <p class="text-xs text-slate-400">
+                                        <?= e($bill["category_name"] ?: 'Uncategorized') ?> •
+                                        Due <?= date("M j", strtotime($bill["date"])) ?>
+                                        <?php if ($bill["source"] === 'recurring'): ?>
+                                            • <span class="text-indigo-400 inline-flex items-center gap-1"><?= svgIcon('refresh', 'h-3 w-3') ?> Recurring</span>
+                                        <?php endif; ?>
+                                    </p>
+                                </div>
+                                <span class="font-bold text-sm text-rose-400 whitespace-nowrap">₱<?= formatMoney($bill["amount"]) ?></span>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <?php if ($isPaid): ?>
+                                    <span class="inline-flex items-center gap-1 text-emerald-400 text-xs bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded-md font-medium">
+                                        <?= svgIcon('check', 'h-3.5 w-3.5') ?> Paid
+                                    </span>
+                                    <a href="index.php?mark_paid=<?= (int)$bill["id"] ?>&unpaid=1<?= getCsrfQueryParam() ?>"
+                                       class="text-slate-400 hover:text-white text-xs transition-colors" title="Mark as unpaid">Undo</a>
+                                <?php else: ?>
+                                    <a href="index.php?mark_paid=<?= (int)$bill["id"] ?><?= getCsrfQueryParam() ?>"
+                                       class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5">
+                                        <?= svgIcon('check', 'h-3.5 w-3.5') ?>
+                                        Confirm Paid
+                                    </a>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     <?php endforeach; ?>
                 </div>

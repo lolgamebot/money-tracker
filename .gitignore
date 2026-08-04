@@ -1,3 +1,4 @@
 config/db.php
 .analysis_tmp/
+logs/
 

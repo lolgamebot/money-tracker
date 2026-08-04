@@ -1,7 +1,4 @@
 <?php
-ini_set('session.cookie_httponly', 1);
-ini_set('session.use_only_cookies', 1);
-session_start();
 require "../config/db.php";
 require "../includes/helpers.php";
 requireLogin();
@@ -38,6 +35,23 @@ if (isset($_POST["change_username"])) {
             $account["username"] = $newUsername;
             $successes[] = "Username updated!";
         }
+    }
+}
+
+// Handle email change (only if the email column exists)
+if (isset($_POST["change_email"]) && columnExists($pdo, 'accounts', 'email')) {
+    verifyCsrfToken();
+    $newEmail = trim($_POST["email"] ?? "");
+
+    if (empty($newEmail)) {
+        $errors[] = "Email cannot be empty!";
+    } elseif (!filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = "Please enter a valid email address!";
+    } else {
+        $updateEmail = $pdo->prepare("UPDATE accounts SET email = ? WHERE id = ?");
+        $updateEmail->execute([$newEmail, $userId]);
+        $account["email"] = $newEmail;
+        $successes[] = "Email updated!";
     }
 }
 
@@ -81,9 +95,12 @@ if (isset($_POST["change_password"])) {
                 <div class="w-14 h-14 rounded-full bg-indigo-600 flex items-center justify-center text-2xl font-bold text-white">
                     <?= strtoupper(substr(e($account["username"]), 0, 1)) ?>
                 </div>
-                <div>
+<div>
                     <p class="text-white font-semibold text-lg"><?= e($account["username"]) ?></p>
-                    <p class="text-slate-400 text-sm">Member since <?= date("F Y", strtotime($account["created_at"])) ?></p>
+<p class="text-slate-400 text-sm">Member since <?= date("F Y", strtotime($account["created_at"])) ?></p>
+                    <?php if (!empty($account["email"])): ?>
+                        <p class="text-slate-400 text-sm mt-0.5"><?= e($account["email"]) ?></p>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -111,6 +128,29 @@ if (isset($_POST["change_password"])) {
             </form>
         </div>
 
+        <?php if (columnExists($pdo, 'accounts', 'email')): ?>
+        <!-- Change Email -->
+        <div class="bg-[#111827] rounded-xl border border-slate-700 p-6 mb-6">
+            <h2 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <?= svgIcon('edit', 'h-5 w-5 text-indigo-400') ?>
+                Email Address
+            </h2>
+
+            <form action="profile.php" method="POST" class="space-y-4">
+                <?php renderCsrfInput(); ?>
+                <div>
+                    <label class="block text-sm font-medium text-slate-400 mb-1">Email</label>
+                    <input type="email" name="email" value="<?= e($account['email'] ?? '') ?>" class="<?= INPUT_CLASS ?>">
+                </div>
+                <button type="submit" name="change_email"
+                    class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2">
+                    <?= svgIcon('check') ?>
+                    Update Email
+                </button>
+            </form>
+        </div>
+        <?php endif; ?>
+
         <!-- Change Password -->
         <div class="bg-[#111827] rounded-xl border border-slate-700 p-6">
             <h2 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
@@ -128,7 +168,13 @@ if (isset($_POST["change_password"])) {
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-slate-400 mb-1">New Password</label>
-                    <input type="password" name="new_password" required class="<?= INPUT_CLASS ?>">
+                    <input type="password" name="new_password" id="newPassword" required class="<?= INPUT_CLASS ?>">
+                    <div class="mt-2 hidden" id="strengthMeter">
+                        <div class="h-1.5 w-full bg-slate-700 rounded-full overflow-hidden">
+                            <div id="strengthBar" class="h-full transition-all duration-300" style="width: 0%;"></div>
+                        </div>
+                        <p id="strengthLabel" class="text-xs mt-1 text-slate-400"></p>
+                    </div>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-slate-400 mb-1">Confirm New Password</label>
@@ -142,6 +188,44 @@ if (isset($_POST["change_password"])) {
             </form>
         </div>
     </div>
+
+    <script>
+        // Password strength meter
+        const newPassword = document.getElementById('newPassword');
+        const strengthMeter = document.getElementById('strengthMeter');
+        const strengthBar = document.getElementById('strengthBar');
+        const strengthLabel = document.getElementById('strengthLabel');
+
+        if (newPassword) {
+            newPassword.addEventListener('input', function() {
+                const val = this.value;
+                if (val.length === 0) {
+                    strengthMeter.classList.add('hidden');
+                    return;
+                }
+                strengthMeter.classList.remove('hidden');
+
+                let score = 0;
+                if (val.length >= 8) score++;
+                if (/[A-Z]/.test(val)) score++;
+                if (/[0-9]/.test(val)) score++;
+                if (/[^A-Za-z0-9]/.test(val)) score++;
+
+                const configs = [
+                    { w: '0%',   c: '#f43f5e', l: 'Too weak', t: 'text-rose-400' },
+                    { w: '30%',  c: '#f43f5e', l: 'Weak', t: 'text-rose-400' },
+                    { w: '55%',  c: '#f59e0b', l: 'Fair', t: 'text-amber-400' },
+                    { w: '80%',  c: '#10b981', l: 'Good', t: 'text-emerald-400' },
+                    { w: '100%', c: '#10b981', l: 'Strong', t: 'text-emerald-400' }
+                ];
+                const cfg = configs[score];
+                strengthBar.style.width = cfg.w;
+                strengthBar.style.backgroundColor = cfg.c;
+                strengthLabel.textContent = cfg.l;
+                strengthLabel.className = 'text-xs mt-1 ' + cfg.t;
+            });
+        }
+    </script>
 
 <?php renderFooter(); ?>
 
