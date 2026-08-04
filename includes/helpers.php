@@ -217,12 +217,12 @@ function renderHeader($title, $opts = []) {
 
     $libs = '';
     if ($opts['flatpickr']) {
-        $libs .= "\n    " . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" integrity="sha384-REPLACE_WITH_SHA384" crossorigin="anonymous">'
-              . "\n    " . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/themes/dark.css" integrity="sha384-REPLACE_WITH_SHA384" crossorigin="anonymous">'
-              . "\n    " . '<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js" integrity="sha384-REPLACE_WITH_SHA384" crossorigin="anonymous"></script>';
+        $libs .= "\n    " . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" crossorigin="anonymous">'
+              . "\n    " . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/themes/dark.css" crossorigin="anonymous">'
+              . "\n    " . '<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js" crossorigin="anonymous"></script>';
     }
     if ($opts['chartjs']) {
-        $libs .= "\n    " . '<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" integrity="sha384-REPLACE_WITH_SHA384" crossorigin="anonymous"></script>';
+        $libs .= "\n    " . '<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" crossorigin="anonymous"></script>';
     }
 
     echo '<!DOCTYPE html>
@@ -420,10 +420,10 @@ function computeRecurringEndDate($startDate, $interval, $endCondition, $input = 
         if (!in_array($unit, $allowedUnits, true)) {
             $unit = 'months';
         }
-
+        $endDate = $start->modify("+$num $unit")->format('Y-m-d');
     }
 
-return $endDate;
+    return $endDate;
 }
 
 // ---------------------------------------------------------------------
@@ -719,4 +719,3 @@ function markBillPaid($pdo, $userId, $billId, $paid = true) {
     $updateOneOff->execute([$paid ? 1 : 0, $paid ? date('Y-m-d H:i:s') : null, $bill['id'], $userId]);
     return true;
 }
-
