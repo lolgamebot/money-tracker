@@ -6,26 +6,26 @@ A simple, self-hosted personal expense & income tracker built with **PHP** and *
 
 ```
 moneytracker/
+├── index.php               # Entry point — redirects to public/login.php
+├── database.sql            # Database schema (reference only)
 ├── config/
 │   ├── db.example.php      # Database config template (copy to db.php)
-│   └── db.php             # ⚠️ Real credentials — NOT committed (gitignored)
-├── database/
-│   └── schema.sql         # Database schema (reference only)
+│   └── db.php              # ⚠️ Real credentials — NOT committed (gitignored)
 ├── includes/
-│   ├── helpers.php         # Security, CSRF, session, nav helpers
-│   └── process_recurring.php # Recurring record generator
-├── add.php                 # Add expense/income record
-├── categories.php          # Manage categories
-├── charts.php              # Analytics charts
-├── delete.php              # Delete record
-├── edit.php                # Edit record
-├── index.php               # Dashboard
-├── login.php               # Login
-├── logout.php              # Logout
-├── profile.php             # Change username/password
-├── recurring.php           # Manage recurring records
-├── register.php            # Register account
-└── .gitignore              # Ignores config/db.php (credentials)
+│   └── helpers.php         # Security, CSRF, session, nav helpers
+└── public/                 # All application files (PHP + assets)
+    ├── index.php           # Dashboard
+    ├── login.php           # Login
+    ├── register.php        # Register account
+    ├── logout.php          # Logout
+    ├── add.php             # Add expense/income record
+    ├── edit.php            # Edit record
+    ├── delete.php          # Delete record
+    ├── categories.php      # Manage categories
+    ├── recurring.php       # Manage recurring records
+    ├── process_recurring.php # Recurring record generator
+    ├── charts.php          # Analytics charts
+    └── profile.php         # Change username/password
 ```
 
 ## 🚀 Local Setup (XAMPP)
@@ -42,8 +42,8 @@ moneytracker/
    $dbuser = "root";
    $dbpass = "";
    ```
-3. **Create the database:** Open `database/schema.sql` and run it in phpMyAdmin (or import it).
-4. **Run the app:** Visit `http://localhost/moneytracker/` and register an account.
+3. **Create the database:** Open `database.sql` and run it in phpMyAdmin (or import it).
+4. **Run the app:** Visit `http://localhost/moneytracker/` — the root `index.php` redirects to `public/login.php`.
 
 ## ☁️ Deploying to InfinityFree
 
@@ -65,13 +65,13 @@ InfinityFree provides free PHP + MySQL hosting. Your existing database data **wi
    ```
 
 ### 3. Import/verify your database
-> ⚠️ **Do NOT run `schema.sql` on your production database if you already have data.** It's a fresh-install reference only.
+> ⚠️ **Do NOT run `database.sql` on your production database if you already have data.** It's a fresh-install reference only.
 
 - If you're **migrating existing data**, your current tables (`accounts`, `categories`, `expenses`) are already correct — no import needed.
-- If this is a **fresh install**, import `database/schema.sql` once via phpMyAdmin.
+- If this is a **fresh install**, import `database.sql` once via phpMyAdmin.
 
 ### 4. Visit your site
-Your app will be at `https://your-account.byethost.com/` (or your linked domain).
+Your app will be at `https://your-account.byethost.com/` (or your linked domain). The root `index.php` automatically redirects to the login page.
 
 ## 🔒 Security Notes
 
@@ -87,3 +87,4 @@ Your app will be at `https://your-account.byethost.com/` (or your linked domain)
 - **Tailwind CSS** (CDN)
 - **Flatpickr** (date picker)
 - **Chart.js** (charts)
+

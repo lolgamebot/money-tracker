@@ -1,20 +1,3 @@
-# Database credentials (NEVER commit)
 config/db.php
+.analysis_tmp/
 
-# Local server config
-*.local
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE / editor
-.vscode/
-.idea/
-*.swp
-
-# Logs
-*.log
-
-# Temp files
-*.tmp
