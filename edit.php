@@ -1,7 +1,7 @@
 <?php
 session_start();
-require "db.php";
-require "helpers.php";
+require "config/db.php";
+require "includes/helpers.php";
 requireLogin();
 
 $userId = $_SESSION["user_id"];

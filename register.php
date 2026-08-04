@@ -1,6 +1,6 @@
 <?php
-require "db.php";
-require "helpers.php";
+require "config/db.php";
+require "includes/helpers.php";
 
 initSecureSession();
 

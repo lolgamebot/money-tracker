@@ -1,5 +1,5 @@
 <?php
-require "helpers.php";
+require "includes/helpers.php";
 initSecureSession();
 
 // Clear all session variables

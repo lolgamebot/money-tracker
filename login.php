@@ -1,6 +1,6 @@
 <?php
-require "db.php";
-require "helpers.php";
+require "config/db.php";
+require "includes/helpers.php";
 
 initSecureSession();
 
@@ -50,7 +50,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $_SESSION["user_id"] = $account["id"];
             $_SESSION["username"] = $account["username"];
 
-            require "process_recurring.php";
+            require "includes/process_recurring.php";
             processRecurring($pdo, $account["id"]);
 
             header("Location: index.php");

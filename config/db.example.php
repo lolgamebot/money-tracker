@@ -1,7 +1,10 @@
 <?php
-$host = "localhost";
-$dbname = "moneytracker";
-$dbuser = "root";
+// Database Configuration
+// Copy this file to db.php and fill in your credentials
+// For InfinityFree: host is usually sql###.infinityfree.com
+$host = "";
+$dbname = "";
+$dbuser = "";
 $dbpass = "";
 
 try {
