@@ -1,10 +1,12 @@
 <?php
+ini_set('session.cookie_httponly', 1);
+ini_set('session.use_only_cookies', 1);
 session_start();
 require "../config/db.php";
 require "../includes/helpers.php";
 requireLogin();
 
-$userId = $_SESSION["user_id"];
+$userId = getUserId();
 
 // Spending by category
 $getCategoryData = $pdo->prepare("
@@ -20,7 +22,7 @@ $categoryData = $getCategoryData->fetchAll();
 
 // Monthly spending — last 6 months
 $getMonthlyData = $pdo->prepare("
-    SELECT 
+    SELECT
         DATE_FORMAT(date, '%b %Y') AS month,
         SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) AS expenses,
         SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) AS income
@@ -34,24 +36,15 @@ $getMonthlyData->execute([$userId]);
 $monthlyData = $getMonthlyData->fetchAll();
 
 // Prepare data for Chart.js
-$categoryLabels = array_column($categoryData, 'name');
-$categoryTotals = array_column($categoryData, 'total');
+$categoryLabels  = array_column($categoryData, 'name');
+$categoryTotals  = array_column($categoryData, 'total');
 
-$monthLabels = array_column($monthlyData, 'month');
-$monthlyExpenses = array_column($monthlyData, 'expenses');
-$monthlyIncome = array_column($monthlyData, 'income');
+$monthLabels       = array_column($monthlyData, 'month');
+$monthlyExpenses   = array_column($monthlyData, 'expenses');
+$monthlyIncome     = array_column($monthlyData, 'income');
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Charts - Money Tracker</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body class="bg-[#0a0f1e] min-h-screen text-slate-200">
+<?php renderHeader('Charts', ['chartjs' => true]); ?>
 
     <?php renderNav(); ?>
 
@@ -230,5 +223,6 @@ $monthlyIncome = array_column($monthlyData, 'income');
         <?php endif; ?>
     </script>
 
-</body>
-</html>
+<?php renderFooter(); ?>
+
+</content>

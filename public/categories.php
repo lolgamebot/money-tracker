@@ -1,10 +1,15 @@
 <?php
+ini_set('session.cookie_httponly', 1);
+ini_set('session.use_only_cookies', 1);
 session_start();
 require "../config/db.php";
 require "../includes/helpers.php";
 requireLogin();
 
-$userId = $_SESSION["user_id"];
+$userId = getUserId();
+
+$errors    = [];
+$successes = [];
 
 // Handle delete (CSRF-protected)
 if (isset($_GET["delete"])) {
@@ -12,6 +17,7 @@ if (isset($_GET["delete"])) {
     $categoryId = (int)$_GET["delete"];
     $deleteCategory = $pdo->prepare("DELETE FROM categories WHERE id = ? AND user_id = ?");
     $deleteCategory->execute([$categoryId, $userId]);
+    setFlash("Category deleted!");
     header("Location: categories.php");
     exit;
 }
@@ -23,18 +29,19 @@ if (isset($_GET["edit"]) && $_SERVER["REQUEST_METHOD"] == "POST") {
     $newName = trim($_POST["name"] ?? "");
 
     if (empty($newName)) {
-        $error = "Category name cannot be empty!";
+        $errors[] = "Category name cannot be empty!";
     } else {
-        $checkDuplicate = $pdo->prepare("SELECT * FROM categories WHERE name = ? AND user_id = ? AND id != ?");
+        $checkDuplicate = $pdo->prepare("SELECT id FROM categories WHERE name = ? AND user_id = ? AND id != ?");
         $checkDuplicate->execute([$newName, $userId, $categoryId]);
-        $duplicate = $checkDuplicate->fetch();
 
-        if ($duplicate) {
-            $error = "Category name already exists!";
+        if ($checkDuplicate->fetch()) {
+            $errors[] = "Category name already exists!";
         } else {
             $updateCategory = $pdo->prepare("UPDATE categories SET name = ? WHERE id = ? AND user_id = ?");
             $updateCategory->execute([$newName, $categoryId, $userId]);
-            $success = "Category renamed!";
+            setFlash("Category renamed!");
+            header("Location: categories.php");
+            exit;
         }
     }
 }
@@ -45,25 +52,24 @@ if (!isset($_GET["edit"]) && $_SERVER["REQUEST_METHOD"] == "POST") {
     $categoryName = trim($_POST["name"] ?? "");
 
     if (empty($categoryName)) {
-        $error = "Please enter a category name!";
+        $errors[] = "Please enter a category name!";
     } else {
-        $checkCategory = $pdo->prepare("SELECT * FROM categories WHERE name = ? AND user_id = ?");
+        $checkCategory = $pdo->prepare("SELECT id FROM categories WHERE name = ? AND user_id = ?");
         $checkCategory->execute([$categoryName, $userId]);
-        $existingCategory = $checkCategory->fetch();
 
-        if ($existingCategory) {
-            $error = "Category already exists!";
+        if ($checkCategory->fetch()) {
+            $errors[] = "Category already exists!";
         } else {
             $createCategory = $pdo->prepare("INSERT INTO categories (user_id, name) VALUES (?, ?)");
             $createCategory->execute([$userId, $categoryName]);
-            $success = "Category added!";
+            setFlash("Category added!");
+            header("Location: categories.php");
+            exit;
         }
     }
 }
 
-$getCategories = $pdo->prepare("SELECT * FROM categories WHERE user_id = ? ORDER BY name ASC");
-$getCategories->execute([$userId]);
-$categories = $getCategories->fetchAll();
+$categories = getCategories($pdo, $userId);
 
 // Fetch category being edited if any
 $editingCategory = null;
@@ -71,31 +77,22 @@ if (isset($_GET["edit"])) {
     $getEditing = $pdo->prepare("SELECT * FROM categories WHERE id = ? AND user_id = ?");
     $getEditing->execute([$_GET["edit"], $userId]);
     $editingCategory = $getEditing->fetch();
+    if (!$editingCategory) {
+        header("Location: categories.php");
+        exit;
+    }
 }
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Categories - Money Tracker</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-[#0a0f1e] min-h-screen text-slate-200">
+<?php renderHeader('Categories'); ?>
 
     <?php renderNav(); ?>
 
     <div class="max-w-xl mx-auto px-4 sm:px-6 py-6 sm:py-8 w-full">
         <h1 class="text-2xl font-bold text-white mb-6">My Categories</h1>
 
-        <?php if (isset($error)): ?>
-            <div class="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg px-4 py-3 mb-6 text-sm"><?= e($error) ?></div>
-        <?php endif; ?>
-
-        <?php if (isset($success)): ?>
-            <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-lg px-4 py-3 mb-6 text-sm"><?= e($success) ?></div>
-        <?php endif; ?>
+        <?php renderAlerts($errors, $successes); ?>
+        <?php renderFlash(); ?>
 
         <!-- Add or Edit Form -->
         <div class="bg-[#111827] rounded-xl border border-slate-700 p-4 sm:p-6 mb-6">
@@ -103,12 +100,11 @@ if (isset($_GET["edit"])) {
                 <p class="text-sm text-slate-400 mb-3">Renaming: <span class="text-white font-medium"><?= e($editingCategory["name"]) ?></span></p>
                 <form action="categories.php?edit=<?= (int)$editingCategory["id"] ?>" method="POST" class="flex flex-col sm:flex-row gap-3">
                     <?php renderCsrfInput(); ?>
-                    <input type="text" name="name" value="<?= e($editingCategory["name"]) ?>" required
-                        class="flex-1 bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 text-sm">
+                    <input type="text" name="name" value="<?= e($editingCategory["name"]) ?>" required class="<?= INPUT_CLASS ?>">
                     <div class="flex gap-2">
                         <button type="submit"
                             class="flex-1 sm:flex-initial bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2.5 rounded-lg transition-colors text-sm flex items-center justify-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                            <?= svgIcon('check') ?>
                             Save
                         </button>
                         <a href="categories.php"
@@ -120,11 +116,10 @@ if (isset($_GET["edit"])) {
             <?php else: ?>
                 <form action="categories.php" method="POST" class="flex flex-col sm:flex-row gap-3">
                     <?php renderCsrfInput(); ?>
-                    <input type="text" name="name" placeholder="e.g. Food, Salary..." required
-                        class="flex-1 bg-[#0a0f1e] border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 text-sm">
+                    <input type="text" name="name" placeholder="e.g. Food, Salary..." required class="<?= INPUT_CLASS ?>">
                     <button type="submit"
                         class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm flex items-center justify-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                        <?= svgIcon('plus') ?>
                         Add Category
                     </button>
                 </form>
@@ -143,13 +138,13 @@ if (isset($_GET["edit"])) {
                             <div class="flex gap-3">
                                 <a href="categories.php?edit=<?= (int)$category["id"] ?>"
                                    class="text-indigo-400 hover:text-indigo-300 text-sm transition-colors flex items-center gap-1.5">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                    <?= svgIcon('edit', 'h-3.5 w-3.5') ?>
                                     Rename
                                 </a>
                                 <a href="categories.php?delete=<?= (int)$category["id"] ?><?= getCsrfQueryParam() ?>"
                                    onclick="return confirm('Delete this category?')"
                                    class="text-rose-400 hover:text-rose-300 text-sm transition-colors flex items-center gap-1.5">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                    <?= svgIcon('trash', 'h-3.5 w-3.5') ?>
                                     Delete
                                 </a>
                             </div>
@@ -160,5 +155,6 @@ if (isset($_GET["edit"])) {
         </div>
     </div>
 
-</body>
-</html>
+<?php renderFooter(); ?>
+
+</content>

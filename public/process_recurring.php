@@ -1,65 +1,77 @@
 <?php
+/**
+ * processRecurring — generates child entries for active recurring templates.
+ *
+ * Optimization: instead of running "check exists" + "insert" queries inside
+ * the loop for every record (N+1 problem), we batch-load all existing child
+ * entries for every active parent in ONE query and reuse a single prepared
+ * INSERT statement.
+ */
 function processRecurring($pdo, $userId) {
     // Fetch all active recurring templates for this user
     $getRecurring = $pdo->prepare("
-        SELECT * FROM expenses 
-        WHERE user_id = ? 
+        SELECT * FROM expenses
+        WHERE user_id = ?
         AND is_recurring = 1
     ");
     $getRecurring->execute([$userId]);
     $recurringRecords = $getRecurring->fetchAll();
 
-    $today = new DateTime('today');
+    if (empty($recurringRecords)) {
+        return;
+    }
+
+    $parentIds    = array_column($recurringRecords, 'id');
+    $placeholders = implode(',', array_fill(0, count($parentIds), '?'));
+
+    // Load every existing generated child (parent_id + date) in one query
+    $existingMap = [];
+    $getExisting = $pdo->prepare("
+        SELECT parent_id, date FROM expenses
+        WHERE user_id = ? AND parent_id IN ($placeholders)
+    ");
+    $getExisting->execute(array_merge([$userId], $parentIds));
+    foreach ($getExisting->fetchAll() as $row) {
+        $existingMap[$row['parent_id']][$row['date']] = true;
+    }
+
+    // Prepare the INSERT statement once and reuse it
+    $insertEntry = $pdo->prepare("
+        INSERT INTO expenses
+        (user_id, category_id, amount, type, description, date, is_recurring, recurring_interval, recurring_end_date, parent_id)
+        VALUES (?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?)
+    ");
+
+    $today    = new DateTime('today');
+    $stepMap  = [
+        'daily'   => '+1 day',
+        'weekly'  => '+1 week',
+        'monthly' => '+1 month',
+        'yearly'  => '+1 year',
+    ];
 
     foreach ($recurringRecords as $record) {
         $interval = $record["recurring_interval"];
-        if (empty($interval)) continue;
+        if (empty($interval) || !isset($stepMap[$interval])) {
+            continue;
+        }
 
-        $startDate = new DateTime($record["date"]);
-        $endDate = $record["recurring_end_date"] ? new DateTime($record["recurring_end_date"]) : null;
+        $startDate  = new DateTime($record["date"]);
+        $endDate    = $record["recurring_end_date"] ? new DateTime($record["recurring_end_date"]) : null;
 
         // Cutoff boundary is either the specified end date or today, whichever is earlier
         $cutoffDate = ($endDate && $endDate < $today) ? $endDate : $today;
 
-        // Calculate first generated date after start date
+        // First generated date after start date
         $nextDate = clone $startDate;
-
-        switch ($interval) {
-            case 'daily':
-                $nextDate->modify("+1 day");
-                break;
-            case 'weekly':
-                $nextDate->modify("+1 week");
-                break;
-            case 'monthly':
-                $nextDate->modify("+1 month");
-                break;
-            case 'yearly':
-                $nextDate->modify("+1 year");
-                break;
-        }
+        $nextDate->modify($stepMap[$interval]);
 
         // Generate entries up to the cutoff date
         while ($nextDate <= $cutoffDate) {
             $formattedDate = $nextDate->format('Y-m-d');
 
-            // Check if child entry already exists for this date and parent
-            $checkExists = $pdo->prepare("
-                SELECT id FROM expenses 
-                WHERE user_id = ? 
-                AND parent_id = ? 
-                AND date = ?
-            ");
-            $checkExists->execute([$userId, $record["id"], $formattedDate]);
-            $exists = $checkExists->fetch();
-
-            if (!$exists) {
-                // Insert generated recurring entry
-                $insertEntry = $pdo->prepare("
-                    INSERT INTO expenses 
-                    (user_id, category_id, amount, type, description, date, is_recurring, recurring_interval, recurring_end_date, parent_id)
-                    VALUES (?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?)
-                ");
+            // Insert only if it does not already exist for this parent + date
+            if (empty($existingMap[$record["id"]][$formattedDate])) {
                 $insertEntry->execute([
                     $userId,
                     $record["category_id"],
@@ -69,26 +81,12 @@ function processRecurring($pdo, $userId) {
                     $formattedDate,
                     $record["id"]
                 ]);
+                // Track it so duplicate inserts are skipped within this run
+                $existingMap[$record["id"]][$formattedDate] = true;
             }
 
-            // Advance to next interval
-            switch ($interval) {
-                case 'daily':
-                    $nextDate->modify("+1 day");
-                    break;
-                case 'weekly':
-                    $nextDate->modify("+1 week");
-                    break;
-                case 'monthly':
-                    $nextDate->modify("+1 month");
-                    break;
-                case 'yearly':
-                    $nextDate->modify("+1 year");
-                    break;
-                default:
-                    break 2;
-            }
+            $nextDate->modify($stepMap[$interval]);
         }
     }
 }
-?>
+
