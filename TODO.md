@@ -18,8 +18,14 @@
 - [x] Update `.gitignore` to ignore `config/db.php`
 - [x] Untrack `config/db.php` from git (`git rm --cached`)
 - [x] Add `README.md` with setup + InfinityFree deployment instructions
-- [ ] Commit the restructure cleanly
+- [x] Commit the restructure cleanly
 
 ## Database Safety
 - [x] Verify `schema.sql` is reference-only (not run against live DB)
 - [x] Preserve `config/db.php` credentials
+
+## Verification
+- [x] All 13 PHP files pass `php -l` syntax checks
+- [x] Include paths resolve correctly (config/db.php, includes/helpers.php, includes/process_recurring.php)
+- [x] Working tree clean, commit created
+- [x] `config/db.php` confirmed gitignored & untracked
