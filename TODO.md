@@ -18,7 +18,7 @@
 - [x] Update `.gitignore` to `config/db.php` + `.analysis_tmp/` (matches habittracker)
 - [x] Verified `config/db.php` untracked & gitignored (credentials safe)
 - [x] Update `README.md` with new structure + InfinityFree deployment instructions
-- [ ] Commit the restructure cleanly
+- [x] Commit the restructure cleanly
 - [ ] (Optional) Push to origin
 
 ## Database Safety
