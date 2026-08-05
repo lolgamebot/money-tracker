@@ -14,6 +14,7 @@ $filterType      = $_GET["type"] ?? "";
 $filterCategory  = $_GET["category"] ?? "";
 $filterDateFrom  = $_GET["date_from"] ?? "";
 $filterDateTo    = $_GET["date_to"] ?? "";
+$filterStatus    = $_GET["status"] ?? "";
 
 // Pagination
 $perPage     = 10;
@@ -43,6 +44,11 @@ if (!empty($filterDateFrom)) {
 if (!empty($filterDateTo)) {
     $conditions .= " AND expenses.date <= ?";
     $params[] = $filterDateTo;
+}
+if ($filterStatus === "paid") {
+    $conditions .= " AND expenses.paid = 1";
+} elseif ($filterStatus === "unpaid") {
+    $conditions .= " AND expenses.paid = 0";
 }
 
 // Count total records for pagination
@@ -97,9 +103,17 @@ if (isset($_GET["mark_paid"])) {
     verifyCsrfGet();
     $billId = (int)$_GET["mark_paid"];
     $paidToggle = isset($_GET["unpaid"]) ? 0 : 1;
-    markBillPaid($pdo, $userId, $billId, (bool)$paidToggle);
-    setFlash($paidToggle ? "Bill marked as paid!" : "Bill marked as unpaid.");
-    header("Location: index.php");
+markBillPaid($pdo, $userId, $billId, (bool)$paidToggle);
+    setFlash($paidToggle ? "Record marked as paid!" : "Record marked as unpaid.");
+    header("Location: index.php?" . http_build_query(array_filter([
+        "search"    => $search,
+        "type"      => $filterType,
+        "category"  => $filterCategory,
+        "date_from" => $filterDateFrom,
+        "date_to"   => $filterDateTo,
+        "status"    => $filterStatus,
+        "page"      => $currentPage,
+    ])));
     exit;
 }
 
@@ -145,9 +159,10 @@ $queryString = http_build_query(array_filter([
     "category"    => $filterCategory,
     "date_from"   => $filterDateFrom,
     "date_to"     => $filterDateTo,
+    "status"      => $filterStatus,
 ]));
 
-$hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCategory) || !empty($filterDateFrom) || !empty($filterDateTo);
+$hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCategory) || !empty($filterDateFrom) || !empty($filterDateTo) || !empty($filterStatus);
 ?>
 
 <?php renderHeader('Dashboard', ['flatpickr' => true, 'chartjs' => true]); ?>
@@ -299,13 +314,19 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                     <option value="expense" <?= $filterType == "expense" ? "selected" : "" ?>>Expense</option>
                 </select>
 
-                <select name="category" class="<?= INPUT_CLASS ?>">
+<select name="category" class="<?= INPUT_CLASS ?>">
                     <option value="">All Categories</option>
                     <?php foreach ($categories as $category): ?>
                         <option value="<?= (int)$category["id"] ?>" <?= $filterCategory == $category["id"] ? "selected" : "" ?>>
                             <?= e($category["name"]) ?>
                         </option>
                     <?php endforeach; ?>
+                </select>
+
+                <select name="status" class="<?= INPUT_CLASS ?>">
+                    <option value="">All Status</option>
+                    <option value="paid" <?= $filterStatus === "paid" ? "selected" : "" ?>>Paid / Received</option>
+                    <option value="unpaid" <?= $filterStatus === "unpaid" ? "selected" : "" ?>>Unpaid / Pending</option>
                 </select>
 
                 <div class="flex gap-2 items-center">
@@ -367,7 +388,8 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                                 <th class="text-left py-2.5 pr-4 whitespace-nowrap">Type</th>
                                 <th class="text-left py-2.5 pr-4 whitespace-nowrap">Category</th>
                                 <th class="text-left py-2.5 pr-4 whitespace-nowrap">Description</th>
-                                <th class="text-right py-2.5 pr-4 whitespace-nowrap">Amount</th>
+<th class="text-right py-2.5 pr-4 whitespace-nowrap">Amount</th>
+                                <th class="text-left py-2.5 pr-4 whitespace-nowrap">Status</th>
                                 <th class="text-right py-2.5 whitespace-nowrap">Actions</th>
                             </tr>
                         </thead>
@@ -394,8 +416,18 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                                             </span>
                                         <?php endif; ?>
                                     </td>
-                                    <td class="py-3 pr-4 text-right font-semibold whitespace-nowrap <?= $expense['type'] == 'income' ? 'text-emerald-400' : 'text-rose-400' ?>">
+<td class="py-3 pr-4 text-right font-semibold whitespace-nowrap <?= $expense['type'] == 'income' ? 'text-emerald-400' : 'text-rose-400' ?>">
                                         <?= $expense['type'] == 'income' ? '+' : '-' ?>₱<?= formatMoney($expense["amount"]) ?>
+                                    </td>
+                                    <?php $isPaid = (bool)$expense['paid']; ?>
+                                    <td class="py-3 pr-4 whitespace-nowrap">
+                                        <span class="text-xs px-2.5 py-1 rounded-full font-medium <?= $isPaid ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20' ?>">
+                                            <?= $expense['type'] == 'income' ? ($isPaid ? 'Received' : 'Pending') : ($isPaid ? 'Paid' : 'Unpaid') ?>
+                                        </span>
+                                        <a href="index.php?mark_paid=<?= (int)$expense['id'] ?><?= $isPaid ? '&unpaid=1' : '' ?><?= !empty($queryString) ? '&' . $queryString : '' ?><?= getCsrfQueryParam() ?>"
+                                           class="text-indigo-400 hover:text-indigo-300 text-xs ml-2 transition-colors" title="Toggle status">
+                                            <?= $isPaid ? 'Undo' : 'Mark' ?>
+                                        </a>
                                     </td>
                                     <td class="py-3 text-right whitespace-nowrap">
 <a href="edit.php?id=<?= $expense["id"] ?>" data-modal-uri="edit.php?id=<?= $expense["id"] ?>" class="text-slate-400 hover:text-white mr-2 transition-colors text-xs inline-flex items-center gap-1"><?= svgIcon('edit', 'h-3.5 w-3.5') ?> Edit</a>
@@ -435,8 +467,12 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                                 <span class="text-xs px-2.5 py-0.5 rounded-full <?= $expense['type'] == 'income' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20' ?>">
                                     <?= ucfirst($expense['type']) ?>
                                 </span>
-                                <span class="bg-indigo-500/10 text-indigo-400 text-xs px-2.5 py-0.5 rounded-full border border-indigo-500/20">
+<span class="bg-indigo-500/10 text-indigo-400 text-xs px-2.5 py-0.5 rounded-full border border-indigo-500/20">
                                     <?= e($expense["category_name"]) ?>
+                                </span>
+                                <?php $isPaidMobile = (bool)$expense['paid']; ?>
+                                <span class="text-xs px-2.5 py-0.5 rounded-full font-medium <?= $isPaidMobile ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20' ?>">
+                                    <?= $expense['type'] == 'income' ? ($isPaidMobile ? 'Received' : 'Pending') : ($isPaidMobile ? 'Paid' : 'Unpaid') ?>
                                 </span>
                                 <?php if ($isRecurringSeries): ?>
                                     <span class="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-1">
@@ -446,6 +482,11 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                             </div>
 
                             <div class="flex items-center justify-end gap-3 pt-2 text-xs border-t border-slate-800/80">
+                                <a href="index.php?mark_paid=<?= (int)$expense['id'] ?><?= $isPaidMobile ? '&unpaid=1' : '' ?><?= !empty($queryString) ? '&' . $queryString : '' ?><?= getCsrfQueryParam() ?>"
+                                   class="<?= $isPaidMobile ? 'text-slate-400 bg-slate-800 border border-slate-700' : 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/30' ?> px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5">
+<?= svgIcon($isPaidMobile ? 'refresh' : 'check') ?>
+                                    <?= $isPaidMobile ? 'Mark Unpaid' : 'Mark Paid' ?>
+                                </a>
 <a href="edit.php?id=<?= $expense["id"] ?>" data-modal-uri="edit.php?id=<?= $expense["id"] ?>" class="bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 inline-flex items-center gap-1.5"><?= svgIcon('edit') ?> Edit</a>
                                 <a href="delete.php?id=<?= $expense["id"] ?><?= getCsrfQueryParam() ?>" onclick="return confirm('Delete this record?')" class="text-rose-400 bg-rose-500/10 border border-rose-500/30 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5"><?= svgIcon('trash') ?> Delete</a>
                                 <?php if ($isRecurringSeries): ?>
