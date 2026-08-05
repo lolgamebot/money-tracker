@@ -3,6 +3,15 @@
 //  Money Tracker — Shared Helpers, Reusable Components & Security
 // =====================================================================
 
+// Lock PHP's "today" to the app's local timezone. Without this, PHP falls
+// back to the server's default (usually UTC), so a record dated "today" by
+// the user can register as tomorrow (or vice versa) once compared against
+// the server's own date('Y-m-d'). That mismatch is what made today-dated
+// records show up under Upcoming Bills while yesterday-dated ones didn't,
+// and what forced a manual "Confirm Paid" click just to get today's daily
+// occurrence counted.
+date_default_timezone_set('Asia/Manila');
+
 header("X-Frame-Options: SAMEORIGIN");
 header("X-Content-Type-Options: nosniff");
 header("X-XSS-Protection: 1; mode=block");
@@ -217,11 +226,11 @@ function renderHeader($title, $opts = []) {
 
     $libs = '';
     if ($opts['flatpickr']) {
-        $libs .= "\n    " . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" crossorigin="anonymous">'
+$libs .= "\n    " . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" crossorigin="anonymous">'
               . "\n    " . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/themes/dark.css" crossorigin="anonymous">'
               . "\n    " . '<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js" crossorigin="anonymous"></script>';
     }
-    if ($opts['chartjs']) {
+if ($opts['chartjs']) {
         $libs .= "\n    " . '<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" crossorigin="anonymous"></script>';
     }
 
@@ -420,10 +429,10 @@ function computeRecurringEndDate($startDate, $interval, $endCondition, $input = 
         if (!in_array($unit, $allowedUnits, true)) {
             $unit = 'months';
         }
-        $endDate = $start->modify("+$num $unit")->format('Y-m-d');
+
     }
 
-    return $endDate;
+return $endDate;
 }
 
 // ---------------------------------------------------------------------
@@ -545,7 +554,7 @@ function getUpcomingBills($pdo, $userId) {
 
     $bills = [];
 
-    // 1) One-off future-dated expenses in the current month
+    // 1) One-off future-dated expenses in the current month (strictly after today)
     $stmt = $pdo->prepare("
         SELECT e.*, c.name AS category_name, 'oneoff' AS source
         FROM expenses e
@@ -554,7 +563,7 @@ function getUpcomingBills($pdo, $userId) {
           AND e.type = 'expense'
           AND e.is_recurring = 0
           AND e.parent_id IS NULL
-          AND e.date >= ?
+          AND e.date > ?
           AND e.date <= ?
         ORDER BY e.date ASC
     ");
@@ -590,13 +599,17 @@ function getUpcomingBills($pdo, $userId) {
         $startDate = new DateTime($tpl['date']);
         $nextDate  = clone $startDate;
 
-        // If the start date is in the future (this month), bill due at start date
-        if ($tpl['date'] >= $today && $tpl['date'] <= $monthEnd) {
+        // If the start date is in the future (after today, this month), bill due at start date.
+        // A bill due today is NOT "upcoming", so it is skipped here and handled below.
+        if ($tpl['date'] > $today && $tpl['date'] <= $monthEnd) {
             $nextDate = $startDate;
         } else {
-            // Advance to the first occurrence >= today
-            $nextDate->modify($stepMap[$interval]);
-            while ($nextDate->format('Y-m-d') < $today) {
+            // If the template starts today, move to the next occurrence.
+            if ($tpl['date'] === $today) {
+                $nextDate->modify($stepMap[$interval]);
+            }
+            // Advance to the first occurrence strictly after today
+            while ($nextDate->format('Y-m-d') <= $today) {
                 $nextDate->modify($stepMap[$interval]);
             }
         }
@@ -672,12 +685,21 @@ function markBillPaid($pdo, $userId, $billId, $paid = true) {
             return false;
         }
 
+        $today = date('Y-m-d');
+        $monthEnd = date('Y-m-t');
         $nextDate = clone $startDate;
-        if ($bill['date'] >= date('Y-m-d') && $bill['date'] <= date('Y-m-t')) {
+
+        // Match getUpcomingBills(): only a template whose start date is in the
+        // future and still within this month should use that start date. If the
+        // template starts today, or its next interval lands on today, advance to
+        // the first occurrence strictly after today.
+        if ($bill['date'] > $today && $bill['date'] <= $monthEnd) {
             $nextDate = $startDate;
         } else {
-            $nextDate->modify($stepMap[$interval]);
-            while ($nextDate->format('Y-m-d') < date('Y-m-d')) {
+            if ($bill['date'] === $today) {
+                $nextDate->modify($stepMap[$interval]);
+            }
+            while ($nextDate->format('Y-m-d') <= $today) {
                 $nextDate->modify($stepMap[$interval]);
             }
         }
@@ -719,3 +741,4 @@ function markBillPaid($pdo, $userId, $billId, $paid = true) {
     $updateOneOff->execute([$paid ? 1 : 0, $paid ? date('Y-m-d H:i:s') : null, $bill['id'], $userId]);
     return true;
 }
+

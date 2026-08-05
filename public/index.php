@@ -103,6 +103,30 @@ if (isset($_GET["mark_paid"])) {
     exit;
 }
 
+// Handle "remove" from the Upcoming Bills widget (CSRF-protected).
+// One-off bills are just a single future-dated row, so remove = delete it.
+// Recurring bills are stopped (same as the "Stop" action on the Recurring
+// page) so they quit generating new upcoming occurrences — already
+// generated past records are left untouched.
+if (isset($_GET["remove_bill"])) {
+    verifyCsrfGet();
+    $billId     = (int)$_GET["remove_bill"];
+    $billSource = $_GET["source"] ?? "oneoff";
+
+    if ($billSource === "recurring") {
+        $stopRecurring = $pdo->prepare("UPDATE expenses SET is_recurring = 0 WHERE id = ? AND user_id = ?");
+        $stopRecurring->execute([$billId, $userId]);
+        setFlash("Recurring bill removed from Upcoming Bills.");
+    } else {
+        $deleteBill = $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ? AND is_recurring = 0 AND parent_id IS NULL");
+        $deleteBill->execute([$billId, $userId]);
+        setFlash("Bill removed.");
+    }
+
+    header("Location: index.php");
+    exit;
+}
+
 // Upcoming bills for the current month
 $upcomingBills = getUpcomingBills($pdo, $userId);
 $unpaidBills = array_filter($upcomingBills, function ($b) { return !$b['paid']; });
@@ -230,6 +254,11 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                                         Confirm Paid
                                     </a>
                                 <?php endif; ?>
+                                <a href="index.php?remove_bill=<?= (int)$bill["id"] ?>&source=<?= e($bill["source"]) ?><?= getCsrfQueryParam() ?>"
+                                   onclick="return confirm('<?= $bill["source"] === "recurring" ? "Stop this recurring bill? It will no longer show up in Upcoming Bills." : "Remove this bill? This deletes it." ?>')"
+                                   class="text-slate-500 hover:text-rose-400 transition-colors" title="Remove from Upcoming Bills">
+                                    <?= svgIcon('trash', 'h-3.5 w-3.5') ?>
+                                </a>
                             </div>
                         </div>
                     <?php endforeach; ?>

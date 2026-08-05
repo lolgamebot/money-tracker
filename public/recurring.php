@@ -20,6 +20,26 @@ if (isset($_GET["cancel"])) {
     exit;
 }
 
+// Handle "remove" from the Bills Due This Month widget (CSRF-protected)
+if (isset($_GET["remove_bill"])) {
+    verifyCsrfGet();
+    $billId     = (int)$_GET["remove_bill"];
+    $billSource = $_GET["source"] ?? "oneoff";
+
+    if ($billSource === "recurring") {
+        $stopRecurring = $pdo->prepare("UPDATE expenses SET is_recurring = 0 WHERE id = ? AND user_id = ?");
+        $stopRecurring->execute([$billId, $userId]);
+        setFlash("Recurring bill removed.");
+    } else {
+        $deleteBill = $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ? AND is_recurring = 0 AND parent_id IS NULL");
+        $deleteBill->execute([$billId, $userId]);
+        setFlash("Bill removed.");
+    }
+
+    header("Location: recurring.php");
+    exit;
+}
+
 // Handle "delete series" (CSRF-protected): removes the recurring template
 // and future pending occurrences, but keeps already-generated past records.
 if (isset($_GET["delete_all"])) {
@@ -153,6 +173,11 @@ if (!empty($recurringRecords)) {
                                         Confirm Paid
                                     </a>
                                 <?php endif; ?>
+                                <a href="recurring.php?remove_bill=<?= (int)$bill["id"] ?>&source=<?= e($bill["source"]) ?><?= getCsrfQueryParam() ?>"
+                                   onclick="return confirm('<?= $bill["source"] === "recurring" ? "Stop this recurring bill? It will no longer show up in Bills Due This Month." : "Remove this bill? This deletes it." ?>')"
+                                   class="text-slate-500 hover:text-rose-400 transition-colors" title="Remove from Bills Due This Month">
+                                    <?= svgIcon('trash', 'h-3.5 w-3.5') ?>
+                                </a>
                             </div>
                         </div>
                     <?php endforeach; ?>
