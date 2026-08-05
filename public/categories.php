@@ -15,6 +15,9 @@ if (isset($_GET["delete"])) {
     $deleteCategory = $pdo->prepare("DELETE FROM categories WHERE id = ? AND user_id = ?");
     $deleteCategory->execute([$categoryId, $userId]);
     setFlash("Category deleted!");
+    if (isAjaxRequest()) {
+        respondJson(['success' => true]);
+    }
     header("Location: categories.php");
     exit;
 }
@@ -34,9 +37,12 @@ if (isset($_GET["edit"]) && $_SERVER["REQUEST_METHOD"] == "POST") {
         if ($checkDuplicate->fetch()) {
             $errors[] = "Category name already exists!";
         } else {
-            $updateCategory = $pdo->prepare("UPDATE categories SET name = ? WHERE id = ? AND user_id = ?");
+$updateCategory = $pdo->prepare("UPDATE categories SET name = ? WHERE id = ? AND user_id = ?");
             $updateCategory->execute([$newName, $categoryId, $userId]);
             setFlash("Category renamed!");
+            if (isAjaxRequest()) {
+                respondJson(['success' => true]);
+            }
             header("Location: categories.php");
             exit;
         }
@@ -57,9 +63,12 @@ if (!isset($_GET["edit"]) && $_SERVER["REQUEST_METHOD"] == "POST") {
         if ($checkCategory->fetch()) {
             $errors[] = "Category already exists!";
         } else {
-            $createCategory = $pdo->prepare("INSERT INTO categories (user_id, name) VALUES (?, ?)");
+$createCategory = $pdo->prepare("INSERT INTO categories (user_id, name) VALUES (?, ?)");
             $createCategory->execute([$userId, $categoryName]);
             setFlash("Category added!");
+            if (isAjaxRequest()) {
+                respondJson(['success' => true]);
+            }
             header("Location: categories.php");
             exit;
         }
@@ -81,12 +90,22 @@ if (isset($_GET["edit"])) {
 }
 ?>
 
+<?php $modal = isset($_GET["modal"]) || isAjaxRequest(); ?>
+
+<?php if ($modal): ?>
+<title data-modal-title>My Categories</title>
+<?php endif; ?>
+
+<?php if (!$modal): ?>
 <?php renderHeader('Categories'); ?>
 
     <?php renderNav(); ?>
 
     <div class="max-w-xl mx-auto px-4 sm:px-6 py-6 sm:py-8 w-full">
         <h1 class="text-2xl font-bold text-white mb-6">My Categories</h1>
+<?php else: ?>
+    <div>
+<?php endif; ?>
 
         <?php renderAlerts($errors, $successes); ?>
         <?php renderFlash(); ?>
@@ -152,6 +171,6 @@ if (isset($_GET["edit"])) {
         </div>
     </div>
 
+<?php if (!$modal): ?>
 <?php renderFooter(); ?>
-
-</content>
+<?php endif; ?>

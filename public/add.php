@@ -37,25 +37,37 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             (user_id, category_id, amount, type, description, date, is_recurring, recurring_interval, recurring_duration, recurring_end_date)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
-        $createExpense->execute([
+$createExpense->execute([
             $userId, $categoryId, $amount, $type, $description, $date,
             $isRecurring, $recurringInterval, null, $recurringEndDate
         ]);
         setFlash("Record added successfully!");
+        if (isAjaxRequest()) {
+            respondJson(['success' => true]);
+        }
         header("Location: add.php");
         exit;
     }
 }
 
 $defaultDate = $date ?? date('Y-m-d');
+$modal = isset($_GET["modal"]) || isAjaxRequest();
 ?>
 
+<?php if ($modal): ?>
+<title data-modal-title>Add Record</title>
+<?php endif; ?>
+
+<?php if (!$modal): ?>
 <?php renderHeader('Add Record', ['flatpickr' => true]); ?>
 
     <?php renderNav(); ?>
 
     <div class="max-w-xl mx-auto px-4 sm:px-6 py-6 sm:py-8 w-full">
         <h1 class="text-2xl font-bold text-white mb-6">Add Record</h1>
+<?php else: ?>
+    <div>
+<?php endif; ?>
 
         <?php renderAlerts($errors, []); ?>
         <?php renderFlash(); ?>
@@ -230,7 +242,9 @@ $defaultDate = $date ?? date('Y-m-d');
                 else if (this.value === 'period') periodBox.classList.remove('hidden');
             });
         }
-    </script>
+</script>
 
+<?php if (!$modal): ?>
 <?php renderFooter(); ?>
+<?php endif; ?>
 

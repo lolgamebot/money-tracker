@@ -41,12 +41,22 @@ $monthlyExpenses   = array_column($monthlyData, 'expenses');
 $monthlyIncome     = array_column($monthlyData, 'income');
 ?>
 
+<?php $modal = isset($_GET["modal"]) || isAjaxRequest(); ?>
+
+<?php if ($modal): ?>
+<title data-modal-title>Charts & Analytics</title>
+<?php endif; ?>
+
+<?php if (!$modal): ?>
 <?php renderHeader('Charts', ['chartjs' => true]); ?>
 
     <?php renderNav(); ?>
 
     <div class="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 w-full">
         <h1 class="text-2xl font-bold text-white mb-6">Charts & Analytics</h1>
+<?php else: ?>
+    <div>
+<?php endif; ?>
 
         <?php if (count($categoryData) === 0 && count($monthlyData) === 0): ?>
             <div class="bg-[#111827] rounded-xl border border-slate-700 p-8 sm:p-10 text-center">
@@ -220,6 +230,6 @@ $monthlyIncome     = array_column($monthlyData, 'income');
         <?php endif; ?>
     </script>
 
+<?php if (!$modal): ?>
 <?php renderFooter(); ?>
-
-</content>
+<?php endif; ?>

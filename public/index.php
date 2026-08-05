@@ -110,15 +110,21 @@ if (isset($_GET["mark_paid"])) {
 // generated past records are left untouched.
 if (isset($_GET["remove_bill"])) {
     verifyCsrfGet();
-    $billId     = (int)$_GET["remove_bill"];
-    $billSource = $_GET["source"] ?? "oneoff";
+    $billId = (int)$_GET["remove_bill"];
+    $bill   = getUpcomingBillRemovalTarget($pdo, $userId, $billId);
 
-    if ($billSource === "recurring") {
-        $stopRecurring = $pdo->prepare("UPDATE expenses SET is_recurring = 0 WHERE id = ? AND user_id = ?");
-        $stopRecurring->execute([$billId, $userId]);
+    if (!$bill) {
+        setFlash("That bill is not currently listed in Upcoming Bills.");
+        header("Location: index.php");
+        exit;
+    }
+
+    if ($bill["source"] === "recurring") {
+        $stopRecurring = $pdo->prepare("UPDATE expenses SET is_recurring = 0, recurring_end_date = ? WHERE id = ? AND user_id = ?");
+        $stopRecurring->execute([date('Y-m-d'), $billId, $userId]);
         setFlash("Recurring bill removed from Upcoming Bills.");
     } else {
-        $deleteBill = $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ? AND is_recurring = 0 AND parent_id IS NULL");
+        $deleteBill = $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ? AND is_recurring = 0 AND parent_id IS NULL AND recurring_end_date IS NULL");
         $deleteBill->execute([$billId, $userId]);
         setFlash("Bill removed.");
     }
@@ -144,9 +150,11 @@ $queryString = http_build_query(array_filter([
 $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCategory) || !empty($filterDateFrom) || !empty($filterDateTo);
 ?>
 
-<?php renderHeader('Dashboard', ['flatpickr' => true]); ?>
+<?php renderHeader('Dashboard', ['flatpickr' => true, 'chartjs' => true]); ?>
 
     <?php renderNav(); ?>
+
+    <?php renderModalSystem(); ?>
 
     <div class="max-w-5xl mx-auto px-4 sm:px-6 py-8">
         <h1 class="text-2xl font-bold text-white mb-6">Welcome back, <?= e($_SESSION["username"]) ?>!</h1>
@@ -212,7 +220,7 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                     <?= svgIcon('calendar', 'h-5 w-5 text-indigo-400') ?>
                     Upcoming Bills
                 </h2>
-                <a href="add.php" class="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-colors flex items-center gap-1.5">
+<a href="add.php" data-modal-uri="add.php" class="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-colors flex items-center gap-1.5">
                     <?= svgIcon('plus', 'h-4 w-4') ?>
                     Add Bill
                 </a>
@@ -273,7 +281,7 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                     <?= svgIcon('clipboard', 'h-5 w-5 text-indigo-400') ?>
                     All Records
                 </h2>
-                <a href="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+<a href="add.php" data-modal-uri="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
                     <?= svgIcon('plus') ?>
                     Add Record
                 </a>
@@ -390,7 +398,7 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                                         <?= $expense['type'] == 'income' ? '+' : '-' ?>₱<?= formatMoney($expense["amount"]) ?>
                                     </td>
                                     <td class="py-3 text-right whitespace-nowrap">
-                                        <a href="edit.php?id=<?= $expense["id"] ?>" class="text-slate-400 hover:text-white mr-2 transition-colors text-xs inline-flex items-center gap-1"><?= svgIcon('edit', 'h-3.5 w-3.5') ?> Edit</a>
+<a href="edit.php?id=<?= $expense["id"] ?>" data-modal-uri="edit.php?id=<?= $expense["id"] ?>" class="text-slate-400 hover:text-white mr-2 transition-colors text-xs inline-flex items-center gap-1"><?= svgIcon('edit', 'h-3.5 w-3.5') ?> Edit</a>
                                         <a href="delete.php?id=<?= $expense["id"] ?><?= getCsrfQueryParam() ?>"
                                            onclick="return confirm('Delete this record?')"
                                            class="text-rose-400 hover:text-rose-300 transition-colors text-xs inline-flex items-center gap-1"><?= svgIcon('trash', 'h-3.5 w-3.5') ?> Delete</a>
@@ -438,7 +446,7 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                             </div>
 
                             <div class="flex items-center justify-end gap-3 pt-2 text-xs border-t border-slate-800/80">
-                                <a href="edit.php?id=<?= $expense["id"] ?>" class="bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 inline-flex items-center gap-1.5"><?= svgIcon('edit') ?> Edit</a>
+<a href="edit.php?id=<?= $expense["id"] ?>" data-modal-uri="edit.php?id=<?= $expense["id"] ?>" class="bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 inline-flex items-center gap-1.5"><?= svgIcon('edit') ?> Edit</a>
                                 <a href="delete.php?id=<?= $expense["id"] ?><?= getCsrfQueryParam() ?>" onclick="return confirm('Delete this record?')" class="text-rose-400 bg-rose-500/10 border border-rose-500/30 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5"><?= svgIcon('trash') ?> Delete</a>
                                 <?php if ($isRecurringSeries): ?>
                                     <a href="delete.php?id=<?= $expense["id"] ?>&mode=all<?= getCsrfQueryParam() ?>" onclick="return confirm('Delete this record AND all other entries in this recurring series?')" class="text-rose-400 bg-rose-500/10 border border-rose-500/30 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5"><?= svgIcon('trash') ?> Series</a>

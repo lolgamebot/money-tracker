@@ -71,23 +71,38 @@ if (isset($_POST["change_password"])) {
     } elseif (strlen($newPassword) < 6) {
         $errors[] = "New password must be at least 6 characters!";
     } else {
-        $hashed = password_hash($newPassword, PASSWORD_DEFAULT);
+$hashed = password_hash($newPassword, PASSWORD_DEFAULT);
         $updatePassword = $pdo->prepare("UPDATE accounts SET password = ? WHERE id = ?");
         $updatePassword->execute([$hashed, $userId]);
         $successes[] = "Password updated!";
     }
 }
+
+$modal = isset($_GET["modal"]) || isAjaxRequest();
+
+// If this is an AJAX submit and the update succeeded, respond with JSON success.
+if (isAjaxRequest() && !empty($successes) && empty($errors)) {
+    respondJson(['success' => true]);
+}
 ?>
 
+<?php if ($modal): ?>
+<title data-modal-title>My Profile</title>
+<?php endif; ?>
+
+<?php if (!$modal): ?>
 <?php renderHeader('Profile'); ?>
 
     <?php renderNav(); ?>
 
-    <div class="max-w-xl mx-auto px-4 sm:px-6 py-6 sm:py-8 w-full">
+<div class="max-w-xl mx-auto px-4 sm:px-6 py-6 sm:py-8 w-full">
         <h1 class="text-2xl font-bold text-white mb-6 flex items-center gap-3">
             <?= svgIcon('user', 'h-7 w-7 text-indigo-400') ?>
             My Profile
         </h1>
+<?php else: ?>
+    <div>
+<?php endif; ?>
 
         <!-- Account Info -->
         <div class="bg-[#111827] rounded-xl border border-slate-700 p-4 sm:p-6 mb-6">
@@ -225,8 +240,8 @@ if (isset($_POST["change_password"])) {
                 strengthLabel.className = 'text-xs mt-1 ' + cfg.t;
             });
         }
-    </script>
+</script>
 
+<?php if (!$modal): ?>
 <?php renderFooter(); ?>
-
-</content>
+<?php endif; ?>

@@ -121,6 +121,24 @@ function verifyCsrfGet() {
 }
 
 // ---------------------------------------------------------------------
+//  AJAX / Modal Helpers
+// ---------------------------------------------------------------------
+
+/** Detect whether the current request is an AJAX (fetch/XHR) request. */
+function isAjaxRequest() {
+    return isset($_SERVER['HTTP_X_REQUESTED_WITH'])
+        && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+}
+
+/** Respond with JSON and stop execution. */
+function respondJson($data, $status = 200) {
+    http_response_code($status);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($data);
+    exit;
+}
+
+// ---------------------------------------------------------------------
 //  Alerts & Flash Messages
 // ---------------------------------------------------------------------
 
@@ -311,6 +329,7 @@ CSS;
 /** Top navigation bar (shared by all authenticated pages). */
 function renderNav() {
     $currentPage = basename($_SERVER["PHP_SELF"]);
+    $onDashboard = $currentPage === "index.php";
 
     $links = [
         "index.php"     => ["Dashboard", "home"],
@@ -326,7 +345,9 @@ function renderNav() {
         $label = $item[0];
         $icon  = $item[1];
         $isActive = $currentPage === $page ? "text-white bg-slate-700/60 font-semibold" : "text-slate-400 hover:text-white hover:bg-slate-700/40";
-        $navLinks .= "<a href='{$page}' class='{$isActive} transition-colors py-2 px-3 rounded-lg text-sm whitespace-nowrap flex items-center gap-2'>" . svgIcon($icon) . $label . "</a>";
+        // On the dashboard, nav items open as popups; elsewhere they navigate normally.
+        $modalAttr = ($onDashboard && $page !== "index.php") ? " data-modal-uri='{$page}'" : "";
+        $navLinks .= "<a href='{$page}'{$modalAttr} class='{$isActive} transition-colors py-2 px-3 rounded-lg text-sm whitespace-nowrap flex items-center gap-2'>" . svgIcon($icon) . $label . "</a>";
     }
 
     $logoutLink = '<a href="logout.php" class="text-rose-400 hover:text-rose-300 transition-colors py-2 px-3 rounded-lg hover:bg-slate-700/50 text-sm font-medium flex items-center gap-2">' . svgIcon('logout') . 'Logout</a>';
@@ -375,6 +396,188 @@ function renderNav() {
                 menuIconClose.classList.toggle("hidden");
             });
         }
+    </script>
+    ';
+}
+
+/**
+ * Popup (modal) system for the dashboard.
+ *
+ * Renders an overlay + dialog and wires up all the JS needed to:
+ *  - open a modal from an element with `data-modal-uri`
+ *  - fetch the target page with `?modal=1` (AJAX) and inject its content
+ *  - re-run inline <script> tags so flatpickr / Chart.js / toggles init
+ *  - intercept form submits and same-origin links inside the modal and
+ *    handle them via AJAX (JSON `{success:true}` closes + reloads)
+ *
+ * Only needed on the dashboard (index.php).
+ */
+function renderModalSystem() {
+    echo '
+    <div id="modalOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] hidden items-start justify-center overflow-y-auto py-4 sm:py-10 px-4">
+<div id="modalDialog" class="relative bg-[#0a0f1e] border border-slate-700 rounded-2xl w-full max-w-4xl shadow-2xl my-auto">
+            <!-- Header -->
+            <div class="flex items-center justify-between px-5 py-4 border-b border-slate-700">
+                <h3 id="modalTitle" class="text-lg font-bold text-white">Loading...</h3>
+                <button id="modalClose" class="text-slate-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-slate-800" aria-label="Close">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <!-- Body -->
+            <div id="modalBody" class="p-5 max-h-[75vh] overflow-y-auto">
+                <div class="flex items-center justify-center py-10 text-slate-400">
+                    <svg class="animate-spin h-6 w-6 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                    Loading...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        var overlay  = document.getElementById("modalOverlay");
+        var dialog   = document.getElementById("modalDialog");
+        var body     = document.getElementById("modalBody");
+        var title    = document.getElementById("modalTitle");
+        var closeBtn = document.getElementById("modalClose");
+
+        function openModal() {
+            overlay.classList.remove("hidden");
+            overlay.classList.add("flex");
+            document.body.style.overflow = "hidden";
+        }
+        function closeModal() {
+            overlay.classList.add("hidden");
+            overlay.classList.remove("flex");
+            document.body.style.overflow = "";
+            body.innerHTML = "";
+        }
+        closeBtn.addEventListener("click", closeModal);
+        overlay.addEventListener("click", function(e) {
+            if (e.target === overlay) closeModal();
+        });
+        document.addEventListener("keydown", function(e) {
+            if (e.key === "Escape") closeModal();
+        });
+
+        // Re-execute inline scripts in a given container (so flatpickr/charts/toggles init).
+        function initModalScripts(container) {
+            container.querySelectorAll("script").forEach(function(oldScript) {
+                var newScript = document.createElement("script");
+                newScript.text = oldScript.text;
+                oldScript.parentNode.replaceChild(newScript, oldScript);
+            });
+        }
+
+        // Fetch a modal URI and inject its content.
+        function fetchModal(uri) {
+            openModal();
+            title.textContent = "Loading...";
+            body.innerHTML = \'<div class="flex items-center justify-center py-10 text-slate-400"><svg class="animate-spin h-6 w-6 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>Loading...</div>\';
+
+            fetch(uri + (uri.indexOf("?") === -1 ? "?" : "&") + "modal=1", {
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            })
+            .then(function(r) { return r.text(); })
+            .then(function(html) {
+                // Extract optional title from a <title data-modal-title> tag if present.
+                var titleMatch = html.match(/<title data-modal-title>([^<]*)<\/title>/);
+                if (titleMatch) title.textContent = titleMatch[1];
+                body.innerHTML = html;
+                initModalScripts(body);
+            })
+            .catch(function() {
+                body.innerHTML = \'<div class="text-center py-10 text-rose-400">Failed to load.</div>\';
+            });
+        }
+
+        // Handle navigation & form submission inside the modal via AJAX.
+        function handleAjax(uri, method, formData) {
+            openModal();
+            title.textContent = "Processing...";
+            body.setAttribute("data-loading", "1");
+            body.innerHTML = \'<div class="flex items-center justify-center py-10 text-slate-400"><svg class="animate-spin h-6 w-6 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>Processing...</div>\';
+
+            fetch(uri, {
+                method: method,
+                headers: { "X-Requested-With": "XMLHttpRequest" },
+                body: formData
+            })
+            .then(function(r) {
+                var ct = r.headers.get("Content-Type") || "";
+                if (ct.indexOf("application/json") !== -1) {
+                    return r.json().then(function(data) { return { json: data }; });
+                }
+                return r.text().then(function(t) { return { text: t }; });
+            })
+            .then(function(res) {
+                if (res.json) {
+                    if (res.json.success) {
+                        closeModal();
+                        window.location.reload();
+                    } else {
+                        // Re-render form with validation errors (HTML).
+                        if (res.json.html) {
+                            body.innerHTML = res.json.html;
+                            initModalScripts(body);
+                            title.textContent = res.json.title || "Form";
+                        } else {
+                            body.innerHTML = \'<div class="text-center py-10 text-rose-400">Something went wrong.</div>\';
+                        }
+                    }
+                } else {
+                    // Follow a redirect target (e.g. edit form) — re-fetch in modal.
+                    body.innerHTML = res.text;
+                    initModalScripts(body);
+                }
+            })
+            .catch(function() {
+                body.innerHTML = \'<div class="text-center py-10 text-rose-400">An error occurred.</div>\';
+            });
+        }
+
+        // Global click handler for modal triggers.
+        document.addEventListener("click", function(e) {
+            var trigger = e.target.closest ? e.target.closest("[data-modal-uri]") : null;
+            if (trigger) {
+                e.preventDefault();
+                fetchModal(trigger.getAttribute("data-modal-uri"));
+                return;
+            }
+
+            // Same-origin links inside the modal body.
+            if (body.contains(e.target)) {
+                var link = e.target.closest ? e.target.closest("a[href]") : null;
+                if (link) {
+                    var href = link.getAttribute("href");
+                    if (href && href.indexOf("http") !== 0 && href.charAt(0) !== "#") {
+                        // Let delete.php / logout.php etc. navigate normally.
+                        if (href.indexOf("delete.php") !== -1 || href.indexOf("logout.php") !== -1) {
+                            return;
+                        }
+                        if (link.hasAttribute("onclick")) {
+                            // Let confirm() run; if it returns false, stop.
+                            var handler = link.getAttribute("onclick");
+                            if (handler.indexOf("return false") !== -1) {
+                                return;
+                            }
+                        }
+                        e.preventDefault();
+                        handleAjax(href, "GET", null);
+                    }
+                }
+            }
+        });
+
+        // Global form submit handler for forms inside the modal.
+        document.addEventListener("submit", function(e) {
+            var form = e.target;
+            if (form && body.contains(form)) {
+                e.preventDefault();
+                handleAjax(form.getAttribute("action") || window.location.href, form.method || "POST", new FormData(form));
+            }
+        });
+    })();
     </script>
     ';
 }
@@ -555,6 +758,8 @@ function getUpcomingBills($pdo, $userId) {
     $bills = [];
 
     // 1) One-off future-dated expenses in the current month (strictly after today)
+    // Stopped recurring templates are preserved as explicit stopped rows,
+    // so they must be excluded here instead of appearing as one-offs.
     $stmt = $pdo->prepare("
         SELECT e.*, c.name AS category_name, 'oneoff' AS source
         FROM expenses e
@@ -563,6 +768,7 @@ function getUpcomingBills($pdo, $userId) {
           AND e.type = 'expense'
           AND e.is_recurring = 0
           AND e.parent_id IS NULL
+          AND e.recurring_end_date IS NULL
           AND e.date > ?
           AND e.date <= ?
         ORDER BY e.date ASC
@@ -649,6 +855,22 @@ function getUpcomingBills($pdo, $userId) {
     });
 
     return $bills;
+}
+
+/**
+ * Resolve a remove request against the current month's upcoming-bill list.
+ * Returns the widget row only when the requested id is actually present there.
+ */
+function getUpcomingBillRemovalTarget($pdo, $userId, $billId) {
+    $upcomingBills = getUpcomingBills($pdo, $userId);
+
+    foreach ($upcomingBills as $bill) {
+        if ((int)$bill['id'] === (int)$billId) {
+            return $bill;
+        }
+    }
+
+    return null;
 }
 
 /** Mark a bill as paid (or unmark) for the current month. */

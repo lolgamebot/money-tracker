@@ -70,19 +70,32 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $expenseId, $userId
         ]);
 
-        setFlash("Record updated successfully!");
+setFlash("Record updated successfully!");
+        if (isAjaxRequest()) {
+            respondJson(['success' => true]);
+        }
         header("Location: index.php");
         exit;
     }
 }
+
+$modal = isset($_GET["modal"]) || isAjaxRequest();
 ?>
 
+<?php if ($modal): ?>
+<title data-modal-title>Edit Record</title>
+<?php endif; ?>
+
+<?php if (!$modal): ?>
 <?php renderHeader('Edit Record', ['flatpickr' => true]); ?>
 
     <?php renderNav(); ?>
 
     <div class="max-w-xl mx-auto px-4 sm:px-6 py-6 sm:py-8 w-full">
         <h1 class="text-2xl font-bold text-white mb-6">Edit Record</h1>
+<?php else: ?>
+    <div>
+<?php endif; ?>
 
         <?php renderAlerts($errors, []); ?>
 
@@ -258,9 +271,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 else if (this.value === 'period') periodBox.classList.remove('hidden');
             });
         }
-    </script>
+</script>
 
+<?php if (!$modal): ?>
 <?php renderFooter(); ?>
-
-</content>
+<?php endif; ?>
 

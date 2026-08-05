@@ -13,9 +13,25 @@ processRecurring($pdo, $userId);
 if (isset($_GET["cancel"])) {
     verifyCsrfGet();
     $cancelId = (int)$_GET["cancel"];
-    $cancelRecurring = $pdo->prepare("UPDATE expenses SET is_recurring = 0 WHERE id = ? AND user_id = ?");
-    $cancelRecurring->execute([$cancelId, $userId]);
+    $cancelRecurring = $pdo->prepare(
+        "UPDATE expenses
+         SET is_recurring = 0, recurring_end_date = ?
+         WHERE id = ? AND user_id = ?
+           AND is_recurring = 1
+           AND parent_id IS NULL
+           AND recurring_end_date IS NULL"
+    );
+$cancelRecurring->execute([date('Y-m-d'), $cancelId, $userId]);
+
+    if ($cancelRecurring->rowCount() === 0) {
+        setFlash("That recurring record is no longer available.");
+        if (isAjaxRequest()) respondJson(['success' => true]);
+        header("Location: recurring.php");
+        exit;
+    }
+
     setFlash("Recurring schedule stopped. Generated dashboard entries remain intact.");
+    if (isAjaxRequest()) respondJson(['success' => true]);
     header("Location: recurring.php");
     exit;
 }
@@ -23,19 +39,27 @@ if (isset($_GET["cancel"])) {
 // Handle "remove" from the Bills Due This Month widget (CSRF-protected)
 if (isset($_GET["remove_bill"])) {
     verifyCsrfGet();
-    $billId     = (int)$_GET["remove_bill"];
-    $billSource = $_GET["source"] ?? "oneoff";
+    $billId = (int)$_GET["remove_bill"];
+    $bill   = getUpcomingBillRemovalTarget($pdo, $userId, $billId);
 
-    if ($billSource === "recurring") {
-        $stopRecurring = $pdo->prepare("UPDATE expenses SET is_recurring = 0 WHERE id = ? AND user_id = ?");
-        $stopRecurring->execute([$billId, $userId]);
+if (!$bill) {
+        setFlash("That bill is not currently listed in Bills Due This Month.");
+        if (isAjaxRequest()) respondJson(['success' => true]);
+        header("Location: recurring.php");
+        exit;
+    }
+
+    if ($bill["source"] === "recurring") {
+        $stopRecurring = $pdo->prepare("UPDATE expenses SET is_recurring = 0, recurring_end_date = ? WHERE id = ? AND user_id = ?");
+        $stopRecurring->execute([date('Y-m-d'), $billId, $userId]);
         setFlash("Recurring bill removed.");
     } else {
-        $deleteBill = $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ? AND is_recurring = 0 AND parent_id IS NULL");
+        $deleteBill = $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ? AND is_recurring = 0 AND parent_id IS NULL AND recurring_end_date IS NULL");
         $deleteBill->execute([$billId, $userId]);
         setFlash("Bill removed.");
     }
 
+    if (isAjaxRequest()) respondJson(['success' => true]);
     header("Location: recurring.php");
     exit;
 }
@@ -53,9 +77,10 @@ if (isset($_GET["delete_all"])) {
     // Also delete any generated child records whose date is in the future
     // (upcoming), leaving past records intact.
     $deleteFuture = $pdo->prepare("DELETE FROM expenses WHERE user_id = ? AND parent_id = ? AND date >= ?");
-    $deleteFuture->execute([$userId, $deleteId, date('Y-m-d')]);
+$deleteFuture->execute([$userId, $deleteId, date('Y-m-d')]);
 
     setFlash("Deleted recurring template and upcoming records. Past records remain intact.");
+    if (isAjaxRequest()) respondJson(['success' => true]);
     header("Location: recurring.php");
     exit;
 }
@@ -75,9 +100,10 @@ $recurringRecords = $getRecurring->fetchAll();
 if (isset($_GET["mark_paid"])) {
     verifyCsrfGet();
     $billId = (int)$_GET["mark_paid"];
-    $paidToggle = isset($_GET["unpaid"]) ? 0 : 1;
+$paidToggle = isset($_GET["unpaid"]) ? 0 : 1;
     markBillPaid($pdo, $userId, $billId, (bool)$paidToggle);
     setFlash($paidToggle ? "Bill marked as paid!" : "Bill marked as unpaid.");
+    if (isAjaxRequest()) respondJson(['success' => true]);
     header("Location: recurring.php");
     exit;
 }
@@ -106,11 +132,21 @@ if (!empty($recurringRecords)) {
 }
 ?>
 
+<?php $modal = isset($_GET["modal"]) || isAjaxRequest(); ?>
+
+<?php if ($modal): ?>
+<title data-modal-title>Recurring Records</title>
+<?php endif; ?>
+
+<?php if (!$modal): ?>
 <?php renderHeader('Recurring Records'); ?>
 
     <?php renderNav(); ?>
 
     <div class="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+<?php else: ?>
+    <div>
+<?php endif; ?>
         <div class="flex items-center justify-between mb-6">
             <div>
                 <h1 class="text-2xl font-bold text-white flex items-center gap-2">
@@ -119,7 +155,7 @@ if (!empty($recurringRecords)) {
                 </h1>
                 <p class="text-slate-400 text-sm mt-1">Manage scheduled automated income and expenses.</p>
             </div>
-            <a href="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
+<a href="add.php" data-modal-uri="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
                 <?= svgIcon('plus') ?>
                 Add Recurring
             </a>
@@ -192,7 +228,7 @@ if (!empty($recurringRecords)) {
                 </div>
                 <h3 class="text-lg font-semibold text-white mb-1">No Active Recurring Records</h3>
                 <p class="text-slate-400 text-sm mb-4">Set up automated recurring expenses or income so they repeat on your schedule.</p>
-                <a href="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors inline-block">Create Recurring Record</a>
+<a href="add.php" data-modal-uri="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors inline-block">Create Recurring Record</a>
             </div>
         <?php else: ?>
             <!-- Desktop Table View -->
@@ -317,9 +353,9 @@ if (!empty($recurringRecords)) {
                     </div>
                 <?php endforeach; ?>
             </div>
-        <?php endif; ?>
+<?php endif; ?>
     </div>
 
+<?php if (!$modal): ?>
 <?php renderFooter(); ?>
-
-</content>
+<?php endif; ?>
