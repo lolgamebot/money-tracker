@@ -64,7 +64,7 @@ $username = trim($_POST["username"] ?? "");
             <p class="text-slate-400 mt-1 text-sm">Start tracking your money today</p>
         </div>
 
-        <?php renderAlerts($errors, $successes); ?>
+        <?php renderTrustedAlerts($errors, $successes); ?>
 
         <form action="register.php" method="POST" class="space-y-5">
             <?php renderCsrfInput(); ?>
