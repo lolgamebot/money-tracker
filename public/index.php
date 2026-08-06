@@ -456,18 +456,18 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                     </div>
                 </div>
 
-                <div class="flex gap-2">
+                <div class="flex gap-2 sm:col-span-3">
                     <button type="submit"
                         class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5">
                         <?= svgIcon('search') ?>
                         Filter
                     </button>
                     <a href="index.php?export=1&<?= $queryString ?>"
-                        class="flex-1 text-center bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium py-2.5 rounded-lg transition-colors" title="Download current results as CSV">
+                        class="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5" title="Download current results as CSV">
                         <?= svgIcon('download', 'h-4 w-4') ?> Export CSV
                     </a>
                     <a href="index.php"
-                        class="flex-1 text-center bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium py-2.5 rounded-lg transition-colors">
+                        class="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5">
                         Clear
                     </a>
                 </div>

@@ -30,7 +30,7 @@ $cancelRecurring->execute([date('Y-m-d'), $cancelId, $userId]);
         exit;
     }
 
-    if (isAjaxRequest()) respondJson(['success' => true, 'message' => 'Recurring schedule stopped.', 'reset' => 'recurring.php']);
+    if (isAjaxRequest()) respondJson(['success' => true, 'message' => 'Recurring schedule stopped.']);
     setFlash("Recurring schedule stopped. Generated dashboard entries remain intact.");
     header("Location: recurring.php");
     exit;
@@ -57,7 +57,7 @@ if (!$bill) {
         $deleteBill->execute([$billId, $userId]);
     }
 
-    if (isAjaxRequest()) respondJson(['success' => true, 'message' => 'Bill removed.', 'reset' => 'recurring.php']);
+    if (isAjaxRequest()) respondJson(['success' => true, 'message' => 'Bill removed.']);
     setFlash($bill["source"] === "recurring" ? "Recurring bill removed." : "Bill removed.");
     header("Location: recurring.php");
     exit;
@@ -78,7 +78,7 @@ if (isset($_GET["delete_all"])) {
     $deleteFuture = $pdo->prepare("DELETE FROM expenses WHERE user_id = ? AND parent_id = ? AND date >= ?");
 $deleteFuture->execute([$userId, $deleteId, date('Y-m-d')]);
 
-if (isAjaxRequest()) respondJson(['success' => true, 'message' => 'Deleted recurring template and upcoming records.', 'reset' => 'recurring.php']);
+if (isAjaxRequest()) respondJson(['success' => true, 'message' => 'Deleted recurring template and upcoming records.']);
     setFlash("Deleted recurring template and upcoming records. Past records remain intact.");
     header("Location: recurring.php");
     exit;
@@ -101,7 +101,7 @@ if (isset($_GET["mark_paid"])) {
     $billId = (int)$_GET["mark_paid"];
 $paidToggle = isset($_GET["unpaid"]) ? 0 : 1;
     markBillPaid($pdo, $userId, $billId, (bool)$paidToggle);
-    if (isAjaxRequest()) respondJson(['success' => true, 'message' => $paidToggle ? 'Bill marked as paid!' : 'Bill marked as unpaid.', 'reset' => 'recurring.php']);
+    if (isAjaxRequest()) respondJson(['success' => true, 'message' => $paidToggle ? 'Bill marked as paid!' : 'Bill marked as unpaid.']);
     setFlash($paidToggle ? "Bill marked as paid!" : "Bill marked as unpaid.");
     header("Location: recurring.php");
     exit;

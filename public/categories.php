@@ -15,7 +15,7 @@ if (isset($_GET["delete"])) {
     $deleteCategory = $pdo->prepare("DELETE FROM categories WHERE id = ? AND user_id = ?");
     $deleteCategory->execute([$categoryId, $userId]);
     if (isAjaxRequest()) {
-        respondJson(['success' => true, 'message' => 'Category deleted!', 'reset' => 'categories.php']);
+        respondJson(['success' => true, 'message' => 'Category deleted!']);
     }
     setFlash("Category deleted!");
     header("Location: categories.php");
@@ -40,7 +40,7 @@ if (isset($_GET["edit"]) && $_SERVER["REQUEST_METHOD"] == "POST") {
 $updateCategory = $pdo->prepare("UPDATE categories SET name = ? WHERE id = ? AND user_id = ?");
 $updateCategory->execute([$newName, $categoryId, $userId]);
             if (isAjaxRequest()) {
-                respondJson(['success' => true, 'message' => 'Category renamed!', 'reset' => 'categories.php']);
+                respondJson(['success' => true, 'message' => 'Category renamed!']);
             }
             setFlash("Category renamed!");
             header("Location: categories.php");
@@ -66,7 +66,7 @@ if (!isset($_GET["edit"]) && $_SERVER["REQUEST_METHOD"] == "POST") {
 $createCategory = $pdo->prepare("INSERT INTO categories (user_id, name) VALUES (?, ?)");
 $createCategory->execute([$userId, $categoryName]);
             if (isAjaxRequest()) {
-                respondJson(['success' => true, 'message' => 'Category added!', 'reset' => 'categories.php']);
+                respondJson(['success' => true, 'message' => 'Category added!']);
             }
             setFlash("Category added!");
             header("Location: categories.php");

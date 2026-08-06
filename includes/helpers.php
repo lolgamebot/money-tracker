@@ -513,6 +513,9 @@ function renderModalSystem() {
         var body     = document.getElementById("modalBody");
         var title    = document.getElementById("modalTitle");
         var closeBtn = document.getElementById("modalClose");
+        var modalDirty = false;
+        var modalForm = null;
+        var modalSubmitBtn = null;
 
         function openModal() {
             overlay.classList.remove("hidden");
@@ -523,6 +526,13 @@ function renderModalSystem() {
             overlay.classList.add("hidden");
             overlay.classList.remove("flex");
             document.body.style.overflow = "";
+            // If records were added via the "keep open" add form, refresh the
+            // page once the modal is dismissed so the dashboard reflects them.
+            if (modalDirty) {
+                modalDirty = false;
+                window.location.reload();
+                return;
+            }
             body.innerHTML = "";
         }
         closeBtn.addEventListener("click", closeModal);
@@ -534,16 +544,21 @@ function renderModalSystem() {
         });
 
         // Re-execute inline scripts in a given container (so flatpickr/charts/toggles init).
+        // Wrapping each script in an IIFE keeps top-level `const`/`let` from
+        // re-declaring on every re-injection (which throws a SyntaxError and
+        // silently kills flatpickr/chart initialization on the next render).
         function initModalScripts(container) {
             container.querySelectorAll("script").forEach(function(oldScript) {
+                if (oldScript.src) return;
                 var newScript = document.createElement("script");
-                newScript.text = oldScript.text;
+                newScript.text = "(function(){" + oldScript.text + "})();\n";
                 oldScript.parentNode.replaceChild(newScript, oldScript);
             });
         }
 
         // Fetch a modal URI and inject its content.
         function fetchModal(uri) {
+            modalDirty = false;
             openModal();
             title.textContent = "Loading...";
             body.innerHTML = \'<div class="flex items-center justify-center py-10 text-slate-400"><svg class="animate-spin h-6 w-6 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>Loading...</div>\';
@@ -566,14 +581,18 @@ function renderModalSystem() {
 
 // Handle navigation & form submission inside the modal via AJAX.
         function handleAjax(uri, method, formData) {
-            // Preserve the current form so we can restore it after a successful
-            // save (e.g. edit) without re-requesting or closing the modal.
-            var previousHtml = body.innerHTML;
+            // Remember the live form so it can be kept open + reset in place
+            // (keeps the calendar working instead of re-injecting fresh HTML).
+            modalForm = formData ? body.querySelector("form") : null;
+            modalSubmitBtn = modalForm ? modalForm.querySelector("button[type=submit]") : null;
             var previousTitle = title.textContent;
             openModal();
             title.textContent = "Processing...";
             body.setAttribute("data-loading", "1");
-            body.innerHTML = \'<div class="flex items-center justify-center py-10 text-slate-400"><svg class="animate-spin h-6 w-6 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>Processing...</div>\';
+            if (modalSubmitBtn) {
+                modalSubmitBtn.setAttribute("disabled", "disabled");
+                modalSubmitBtn.style.opacity = "0.6";
+            }
 
             fetch(uri, {
                 method: method,
@@ -589,39 +608,35 @@ function renderModalSystem() {
             })
 .then(function(res) {
                 body.removeAttribute("data-loading");
+                if (modalSubmitBtn) {
+                    modalSubmitBtn.removeAttribute("disabled");
+                    modalSubmitBtn.style.opacity = "";
+                }
                 if (res.json) {
                     if (res.json.success) {
-                        // Show a toast and keep the modal open so the user can
-                        // continue adding/editing without being kicked back out.
+                        // Show a toast, then either keep the current form open
+                        // for another entry or reload the page depending on the
+                        // endpoint (add = keepOpen, everything else = reload).
                         if (typeof showToast === "function") {
                             showToast(res.json.message || "Saved successfully!", "success");
                         }
-                        if (res.json.reset) {
-                            // Re-fetch a fresh form (e.g. after adding) so the
-                            // user can add another record without reloading.
-                            var freshUri = res.json.reset;
-                            fetch(freshUri + (freshUri.indexOf("?") === -1 ? "?" : "&") + "modal=1", {
-                                headers: { "X-Requested-With": "XMLHttpRequest" }
-                            })
-                            .then(function(r) { return r.text(); })
-                            .then(function(html) {
-                                var titleMatch = html.match(/<title data-modal-title>([^<]*)<\/title>/);
-                                if (titleMatch) title.textContent = titleMatch[1];
-                                body.innerHTML = html;
-                                title.textContent = titleMatch ? titleMatch[1] : freshUri;
-                                initModalScripts(body);
-                            })
-                            .catch(function() {
-                                body.innerHTML = previousHtml;
+                        if (res.json.keepOpen) {
+                            // Reset the form and keep the modal open so the user
+                            // can add the next record without a page reload. The
+                            // date-picker element is untouched so flatpickr keeps
+                            // working (no IIFE/re-init needed).
+                            modalDirty = true;
+                            if (modalForm) {
+                                modalForm.reset();
+                                resetModalPickers(modalForm);
                                 title.textContent = previousTitle;
-                                initModalScripts(body);
-                            });
+                            } else {
+                                setTimeout(function() { window.location.reload(); }, 700);
+                            }
                         } else {
-                            // No reset target (e.g. edit): restore the form so it
-                            // stays visible and usable.
-                            body.innerHTML = previousHtml;
-                            title.textContent = previousTitle;
-                            initModalScripts(body);
+                            // One-off save (edit, delete, stop, etc.): reload
+                            // once the toast is visible so changes appear.
+                            setTimeout(function() { window.location.reload(); }, 700);
                         }
                     } else {
                         // Re-render form with validation errors (HTML).
@@ -644,7 +659,39 @@ function renderModalSystem() {
             })
             .catch(function() {
                 body.removeAttribute("data-loading");
+                if (modalSubmitBtn) {
+                    modalSubmitBtn.removeAttribute("disabled");
+                    modalSubmitBtn.style.opacity = "";
+                }
                 body.innerHTML = \'<div class="text-center py-10 text-rose-400">An error occurred.</div>\';
+            });
+        }
+
+        // After a successful "keep open" save, clear the date pickers so
+        // the next entry starts fresh (calendar stays bound to the input).
+        function resetModalPickers(form) {
+            var today = new Date();
+            var iso = today.getFullYear() + "-" +
+                String(today.getMonth() + 1).padStart(2, "0") + "-" +
+                String(today.getDate()).padStart(2, "0");
+            form.querySelectorAll("input").forEach(function(inp) {
+                var fp = inp._flatpickr;
+                if (fp && inp.type === "text") {
+                    if (inp.name === "date") {
+                        fp.setDate(iso, false);
+                    } else {
+                        fp.clear();
+                    }
+                }
+            });
+            // Collapse the recurring options panel on a fresh entry.
+            var recurringBox = form.querySelector("#isRecurring");
+            if (recurringBox) recurringBox.checked = false;
+            var opts = form.querySelector("#recurringOptions");
+            if (opts) opts.classList.add("hidden");
+            ["#endDateBox", "#occurrencesBox", "#periodBox"].forEach(function(sel) {
+                var el = form.querySelector(sel);
+                if (el) el.classList.add("hidden");
             });
         }
 

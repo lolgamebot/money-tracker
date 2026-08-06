@@ -76,10 +76,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         ]);
 
 if (isAjaxRequest()) {
-            // Keep the modal open and show a toast so the user isn't kicked
-            // back to the dashboard after every edit. Re-fetch the form so it
-            // reflects the values that were just saved.
-            respondJson(['success' => true, 'message' => 'Record updated successfully!', 'reset' => 'edit.php?id=' . $expenseId]);
+            // Keep the modal open and show a toast while the page reloads; the
+            // dashboard then reflects the freshly updated record.
+            respondJson(['success' => true, 'message' => 'Record updated successfully!']);
         }
         setFlash("Record updated successfully!");
         header("Location: index.php");
