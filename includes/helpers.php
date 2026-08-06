@@ -15,6 +15,22 @@ date_default_timezone_set('Asia/Manila');
 header("X-Frame-Options: SAMEORIGIN");
 header("X-Content-Type-Options: nosniff");
 header("X-XSS-Protection: 1; mode=block");
+header("Referrer-Policy: same-origin");
+header("Permissions-Policy: geolocation=(), microphone=(), camera=()");
+// Financial data shouldn't be cached/propped in the back/forward cache.
+header("Cache-Control: no-store, max-age=0");
+
+/** Whether the current request is being served over HTTPS (direct or via proxy). */
+function requestIsHttps() {
+    return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (isset($_SERVER['HTTP_X_FORWARDED_PROTO'])
+            && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https');
+}
+
+// When served over HTTPS, tell browsers to always use HTTPS for +1 year.
+if (requestIsHttps()) {
+    header("Strict-Transport-Security: max-age=31536000");
+}
 
 // ---------------------------------------------------------------------
 //  Global Constants
@@ -31,9 +47,18 @@ if (!defined('INPUT_CLASS')) {
 
 function initSecureSession() {
     if (session_status() === PHP_SESSION_NONE) {
-        ini_set('session.cookie_httponly', 1);
+        // Only send the cookie over HTTPS. When access comes through a
+        // reverse proxy (e.g. the Cloudflare quick tunnel), trust its
+        // X-Forwarded-Proto header so the secure flag is honoured there too.
+        $isHttps = requestIsHttps();
+
+        ini_set('session.use_strict_mode', 1);
         ini_set('session.use_only_cookies', 1);
+        ini_set('session.cookie_httponly', 1);
         ini_set('session.cookie_samesite', 'Lax');
+        if ($isHttps) {
+            ini_set('session.cookie_secure', 1);
+        }
         session_start();
     }
 
@@ -78,6 +103,25 @@ function e($str) {
 
 function formatMoney($amount) {
     return number_format((float)$amount, 2);
+}
+
+/** Strict YYYY-MM-DD date validation (rejects impossible dates like 2024-02-31). */
+function isValidDate($date) {
+    if (!is_string($date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+        return false;
+    }
+    $d = DateTime::createFromFormat('Y-m-d', $date);
+    return $d !== false && $d->format('Y-m-d') === $date;
+}
+
+/** Human-friendly due label: "Today", "Tomorrow", or "M j". */
+function formatDueDate($date) {
+    $date = (string)$date;
+    $today = date('Y-m-d');
+    $tomorrow = date('Y-m-d', strtotime('+1 day'));
+    if ($date === $today) return 'Today';
+    if ($date === $tomorrow) return 'Tomorrow';
+    return date("M j", strtotime($date));
 }
 
 // ---------------------------------------------------------------------
@@ -224,6 +268,7 @@ function svgIcon($name, $class = 'h-4 w-4') {
         'user-add' => '<svg xmlns="http://www.w3.org/2000/svg" class="%CLASS%" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>',
         'login' => '<svg xmlns="http://www.w3.org/2000/svg" class="%CLASS%" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>',
         'alert' => '<svg xmlns="http://www.w3.org/2000/svg" class="%CLASS%" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>',
+        'download' => '<svg xmlns="http://www.w3.org/2000/svg" class="%CLASS%" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>',
     ];
 
     return isset($icons[$name]) ? str_replace('%CLASS%', e($class), $icons[$name]) : '';
@@ -378,7 +423,7 @@ function renderNav() {
         $navLinks .= "<a href='{$page}'{$modalAttr} class='{$isActive} transition-colors py-2 px-3 rounded-lg text-sm whitespace-nowrap flex items-center gap-2'>" . svgIcon($icon) . $label . "</a>";
     }
 
-    $logoutLink = '<a href="logout.php" class="text-rose-400 hover:text-rose-300 transition-colors py-2 px-3 rounded-lg hover:bg-slate-700/50 text-sm font-medium flex items-center gap-2">' . svgIcon('logout') . 'Logout</a>';
+    $logoutLink = '<a href="logout.php?csrf_token=' . urlencode(getCsrfToken()) . '" class="text-rose-400 hover:text-rose-300 transition-colors py-2 px-3 rounded-lg hover:bg-slate-700/50 text-sm font-medium flex items-center gap-2">' . svgIcon('logout') . 'Logout</a>';
 
     echo '
     <nav class="bg-[#111827] border-b border-slate-700 border-l-4 border-l-indigo-500 px-4 py-3 sticky top-0 z-50">

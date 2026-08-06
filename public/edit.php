@@ -28,21 +28,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     verifyCsrfToken();
 
     $amount            = $_POST["amount"] ?? "";
-    $categoryId        = $_POST["category_id"] ?? "";
+    $categoryId        = (int)($_POST["category_id"] ?? 0);
     $description       = $_POST["description"] ?? "";
     $date              = $_POST["date"] ?? "";
-    $type              = $_POST["type"] ?? "expense";
+    $type              = in_array($_POST["type"] ?? "", ["expense", "income"], true) ? $_POST["type"] : "expense";
 
     if (empty($amount) || empty($categoryId) || empty($date) || empty($type)) {
         $errors[] = "Please fill all required fields!";
-    } elseif (!is_numeric($amount) || $amount <= 0) {
+    } elseif (!is_numeric($amount) || $amount <= 0 || (float)$amount > 99999999.99) {
         $errors[] = "Please enter a valid amount!";
+    } elseif (!isValidDate($date)) {
+        $errors[] = "Please enter a valid date (YYYY-MM-DD)!";
     } else {
+        $amount            = round((float)$amount, 2);
         $isRecurring       = isset($_POST["is_recurring"]) ? 1 : 0;
+        $allowedIntervals  = ['daily', 'weekly', 'monthly', 'yearly'];
         $recurringInterval = $isRecurring ? ($_POST["recurring_interval"] ?? $expense["recurring_interval"]) : null;
+        $recurringInterval = $recurringInterval && in_array($recurringInterval, $allowedIntervals, true) ? $recurringInterval : "monthly";
         $recurringEndDate  = null;
 
-        if ($isRecurring) {
+        if ($isRecurring && isValidDate($date)) {
             $endCondition = $_POST["end_condition"] ?? "infinite";
             $recurringEndDate = computeRecurringEndDate($date, $recurringInterval, $endCondition, $_POST);
         }
@@ -136,7 +141,7 @@ $modal = isset($_GET["modal"]) || isAjaxRequest();
 
                 <div>
                     <label class="block text-sm font-medium text-slate-400 mb-1">Description <span class="text-slate-500">(optional)</span></label>
-                    <input type="text" name="description"
+                    <input type="text" name="description" maxlength="255"
                         value="<?= e($expense['description']) ?>"
                         placeholder="What was this for?"
                         class="<?= INPUT_CLASS ?>">

@@ -26,8 +26,8 @@ $username = trim($_POST["username"] ?? "");
         $errors[] = "Username must be at least 3 characters long!";
     } elseif ($password !== $confirm) {
         $errors[] = "Passwords do not match!";
-    } elseif (strlen($password) < 6) {
-        $errors[] = "Password must be at least 6 characters long!";
+    } elseif (passwordStrengthScore($password) < 2) {
+        $errors[] = "Password is too weak. Use at least 8 characters with a mix of uppercase, numbers, or symbols.";
     } elseif (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors[] = "Please enter a valid email address!";
     } else {
@@ -71,17 +71,23 @@ $username = trim($_POST["username"] ?? "");
 
             <div>
                 <label class="block text-sm font-medium text-slate-400 mb-1">Username</label>
-                <input type="text" name="username" value="<?= e($_POST['username'] ?? '') ?>" required class="<?= INPUT_CLASS ?>">
+                <input type="text" name="username" value="<?= e($_POST['username'] ?? '') ?>" required autocomplete="username" autofocus class="<?= INPUT_CLASS ?>">
             </div>
 
             <div>
                 <label class="block text-sm font-medium text-slate-400 mb-1">Email <span class="text-slate-500">(optional)</span></label>
-                <input type="email" name="email" value="<?= e($_POST['email'] ?? '') ?>" class="<?= INPUT_CLASS ?>">
+                <input type="email" name="email" value="<?= e($_POST['email'] ?? '') ?>" autocomplete="email" class="<?= INPUT_CLASS ?>">
             </div>
 
             <div>
                 <label class="block text-sm font-medium text-slate-400 mb-1">Password</label>
-                <input type="password" name="password" id="regPassword" required minlength="6" class="<?= INPUT_CLASS ?>">
+                <div class="relative">
+                    <input type="password" name="password" id="regPassword" required minlength="8" autocomplete="new-password" class="<?= INPUT_CLASS ?> pr-11">
+                    <button type="button" data-toggle-password="regPassword" tabindex="-1"
+                        class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-white transition-colors" aria-label="Show password">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    </button>
+                </div>
                 <!-- Password strength meter -->
                 <div class="mt-2 hidden" id="strengthMeter">
                     <div class="h-1.5 w-full bg-slate-700 rounded-full overflow-hidden">
@@ -93,7 +99,13 @@ $username = trim($_POST["username"] ?? "");
 
             <div>
                 <label class="block text-sm font-medium text-slate-400 mb-1">Confirm Password</label>
-                <input type="password" name="confirm" required minlength="6" class="<?= INPUT_CLASS ?>">
+                <div class="relative">
+                    <input type="password" name="confirm" id="regConfirm" required minlength="8" autocomplete="new-password" class="<?= INPUT_CLASS ?> pr-11">
+                    <button type="button" data-toggle-password="regConfirm" tabindex="-1"
+                        class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-white transition-colors" aria-label="Show password">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    </button>
+                </div>
             </div>
 
             <button type="submit"
@@ -145,6 +157,17 @@ $username = trim($_POST["username"] ?? "");
                 strengthLabel.className = 'text-xs mt-1 ' + cfg.t;
             });
         }
+
+        // Show/hide password toggles
+        document.querySelectorAll("[data-toggle-password]").forEach(function(btn) {
+            btn.addEventListener("click", function() {
+                var input = document.getElementById(btn.getAttribute("data-toggle-password"));
+                if (!input) return;
+                var isPassword = input.type === "password";
+                input.type = isPassword ? "text" : "password";
+                btn.setAttribute("aria-label", isPassword ? "Hide password" : "Show password");
+            });
+        });
     </script>
 
 <?php renderFooter(); ?>

@@ -2,6 +2,9 @@
 require "../includes/helpers.php";
 initSecureSession();
 
+// Protect against forced-logout (CSRF) attacks: require a valid token.
+verifyCsrfGet();
+
 // Clear all session variables
 $_SESSION = [];
 

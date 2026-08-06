@@ -9,13 +9,21 @@ if (isset($_SESSION["user_id"])) {
     exit;
 }
 
+// If the previous session timed out (inactivity), surface a friendly notice.
+$sessionExpiredMessage = "";
+if (!empty($_SESSION["session_expired"])) {
+    $sessionExpiredMessage = "Your session expired. Please sign in again.";
+    unset($_SESSION["session_expired"]);
+}
+
 $errors = [];
 
-// --- Login rate limiting (per username) --------------------------------
-$MAX_ATTEMPTS = 5;
+// --- Login rate limiting (per username AND per source IP) -----------------
+$MAX_USER_ATTEMPTS = 5;
+$MAX_IP_ATTEMPTS   = 12;
 $LOCKOUT_TIME = 15 * 60; // 15 minutes
 $isLockedOut  = false;
-$lockRemaining = 0;
+$lockMsg      = "";
 $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '';
 
 // The rate-limiting feature depends on the `login_attempts` table, which
@@ -25,17 +33,30 @@ $rateLimitEnabled = columnExists($pdo, 'login_attempts', 'id');
 if ($rateLimitEnabled && isset($_POST['username'])) {
     $checkUsername = trim($_POST['username']);
     if ($checkUsername !== '') {
-        $attemptStmt = $pdo->prepare("
+        // Per-IP check (guards against sweeping all accounts in parallel).
+        $ipStmt = $pdo->prepare("
             SELECT COUNT(*) FROM login_attempts
-            WHERE username = ?
+            WHERE ip_address = ?
               AND attempted_at > (NOW() - INTERVAL 900 SECOND)
         ");
-        $attemptStmt->execute([$checkUsername]);
-        $failCount = (int)$attemptStmt->fetchColumn();
-
-        if ($failCount >= $MAX_ATTEMPTS) {
+        $ipStmt->execute([$ipAddress]);
+        if ((int)$ipStmt->fetchColumn() >= $MAX_IP_ATTEMPTS) {
             $isLockedOut = true;
-            $lockRemaining = $LOCKOUT_TIME;
+            $lockMsg     = "Too many failed login attempts from this network. Please try again later.";
+        }
+
+        // Per-username lockout (guards a single account from brute force).
+        if (!$isLockedOut) {
+            $attemptStmt = $pdo->prepare("
+                SELECT COUNT(*) FROM login_attempts
+                WHERE username = ?
+                  AND attempted_at > (NOW() - INTERVAL 900 SECOND)
+            ");
+            $attemptStmt->execute([$checkUsername]);
+            if ((int)$attemptStmt->fetchColumn() >= $MAX_USER_ATTEMPTS) {
+                $isLockedOut = true;
+                $lockMsg     = "Too many failed login attempts. Please try again in 15 minutes.";
+            }
         }
     }
 }
@@ -47,7 +68,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $password = $_POST["password"] ?? "";
 
     if ($isLockedOut) {
-        $errors[] = "Too many failed login attempts. Please try again in 15 minutes.";
+        $errors[] = $lockMsg ?: "Too many failed login attempts. Please try again in 15 minutes.";
     } elseif (empty($username) || empty($password)) {
         $errors[] = "Please fill in all fields!";
     } else {
@@ -82,6 +103,8 @@ if ($authenticated) {
             }
 
             session_regenerate_id(true);
+            // Rotate the CSRF token so a token captured before login can't be reused.
+            unset($_SESSION["csrf_token"]);
 
             $_SESSION["user_id"]  = $account["id"];
             $_SESSION["username"] = $account["username"];
@@ -107,7 +130,7 @@ if ($authenticated) {
                 ");
                 $attemptStmt->execute([$username]);
                 $cnt = (int)$attemptStmt->fetchColumn();
-                $remaining = max(0, $MAX_ATTEMPTS - $cnt);
+                $remaining = max(0, $MAX_USER_ATTEMPTS - $cnt);
                 if ($remaining > 0) {
                     $errCount .= " You have $remaining attempt(s) left before lockout.";
                 } else {
@@ -134,17 +157,30 @@ if ($authenticated) {
 
         <?php renderAlerts($errors, []); ?>
 
+        <?php if ($sessionExpiredMessage !== ""): ?>
+            <div class="bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 rounded-lg px-4 py-3 mb-6 text-sm flex items-center gap-2">
+                <?= svgIcon('alert', 'h-4 w-4 text-indigo-400') ?>
+                <?= e($sessionExpiredMessage) ?>
+            </div>
+        <?php endif; ?>
+
         <form action="login.php" method="POST" class="space-y-5">
             <?php renderCsrfInput(); ?>
 
             <div>
                 <label class="block text-sm font-medium text-slate-400 mb-1">Username</label>
-                <input type="text" name="username" required class="<?= INPUT_CLASS ?>">
+                <input type="text" name="username" value="<?= e($_POST['username'] ?? '') ?>" required autocomplete="username" autofocus class="<?= INPUT_CLASS ?>">
             </div>
 
             <div>
                 <label class="block text-sm font-medium text-slate-400 mb-1">Password</label>
-                <input type="password" name="password" required class="<?= INPUT_CLASS ?>">
+                <div class="relative">
+                    <input type="password" name="password" id="loginPassword" required autocomplete="current-password" class="<?= INPUT_CLASS ?> pr-11">
+                    <button type="button" data-toggle-password="loginPassword" tabindex="-1"
+                        class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-white transition-colors" aria-label="Show password">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    </button>
+                </div>
             </div>
 
             <button type="submit"
@@ -159,6 +195,19 @@ if ($authenticated) {
             <a href="register.php" class="text-indigo-400 hover:text-indigo-300 font-medium">Register here</a>
         </p>
     </div>
+
+    <script>
+        // Show/hide password toggles
+        document.querySelectorAll("[data-toggle-password]").forEach(function(btn) {
+            btn.addEventListener("click", function() {
+                var input = document.getElementById(btn.getAttribute("data-toggle-password"));
+                if (!input) return;
+                var isPassword = input.type === "password";
+                input.type = isPassword ? "text" : "password";
+                btn.setAttribute("aria-label", isPassword ? "Hide password" : "Show password");
+            });
+        });
+    </script>
 
 <?php renderFooter(); ?>
 

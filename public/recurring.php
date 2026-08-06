@@ -186,7 +186,7 @@ if (!empty($recurringRecords)) {
                                     </p>
                                     <p class="text-xs text-slate-400">
                                         <?= e($bill["category_name"] ?: 'Uncategorized') ?> •
-                                        Due <?= date("M j", strtotime($bill["date"])) ?>
+                                        Due <?= e(formatDueDate($bill["date"])) ?>
                                         <?php if ($bill["source"] === 'recurring'): ?>
                                             • <span class="text-indigo-400 inline-flex items-center gap-1"><?= svgIcon('refresh', 'h-3 w-3') ?> Recurring</span>
                                         <?php endif; ?>

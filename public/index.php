@@ -27,7 +27,8 @@ $params     = [$userId];
 
 if (!empty($search)) {
     $conditions .= " AND expenses.description LIKE ?";
-    $params[] = "%" . $search . "%";
+    $escaped = str_replace(["\\", "%", "_"], ["\\\\", "\\%", "\\_"], $search);
+    $params[] = "%" . $escaped . "%";
 }
 if (!empty($filterType)) {
     $conditions .= " AND expenses.type = ?";
@@ -69,6 +70,55 @@ $getExpenses = $pdo->prepare("
 $getExpenses->execute($params);
 $expenses = $getExpenses->fetchAll();
 
+// CSV export of the current filtered view (ignores pagination)
+if (isset($_GET["export"])) {
+    $exportQuery = $pdo->prepare("
+        SELECT expenses.id, expenses.date, expenses.type, categories.name AS category_name, expenses.description, expenses.amount
+        FROM expenses
+        LEFT JOIN categories ON expenses.category_id = categories.id
+        $conditions
+        ORDER BY expenses.date DESC
+    ");
+    $exportQuery->execute($params);
+    $exportRows = $exportQuery->fetchAll();
+
+    header("Content-Type: text/csv; charset=utf-8");
+    header("Content-Disposition: attachment; filename=\"moneytracker-export-" . date("Y-m-d") . ".csv\"");
+    $out = fopen("php://output", "w");
+    // UTF-8 BOM so Excel renders the peso sign correctly
+    fwrite($out, "\xEF\xBB\xBF");
+    fputcsv($out, ["ID", "Date", "Type", "Category", "Description", "Amount"]);
+    foreach ($exportRows as $row) {
+        fputcsv($out, [
+            $row["id"],
+            $row["date"],
+            $row["type"],
+            $row["category_name"] ?? "",
+            $row["description"],
+            $row["amount"],
+        ]);
+    }
+    fclose($out);
+    exit;
+}
+
+// Totals of the current filtered view (for the results header)
+$filteredTotals = ['income' => 0.0, 'expense' => 0.0];
+if ($totalRecords > 0) {
+    $filteredStmt = $pdo->prepare("
+        SELECT
+            COALESCE(SUM(CASE WHEN expenses.type = 'income' THEN expenses.amount END), 0) AS income,
+            COALESCE(SUM(CASE WHEN expenses.type = 'expense' THEN expenses.amount END), 0) AS expense
+        FROM expenses
+        LEFT JOIN categories ON expenses.category_id = categories.id
+        $conditions
+    ");
+    $filteredStmt->execute($params);
+    $filteredRow = $filteredStmt->fetch();
+    $filteredTotals['income']  = (float)($filteredRow['income'] ?? 0);
+    $filteredTotals['expense'] = (float)($filteredRow['expense'] ?? 0);
+}
+
 // Summary totals
 $getTotals = $pdo->prepare("
     SELECT
@@ -84,6 +134,30 @@ $totalIncome  = $totals["total_income"] ?? 0;
 $totalExpense = $totals["total_expense"] ?? 0;
 $monthTotal   = $totals["month_total"] ?? 0;
 $balance      = $totalIncome - $totalExpense;
+
+// Previous month totals (for month-over-month deltas on the summary cards)
+$getPrevMonth = $pdo->prepare("
+    SELECT
+        COALESCE(SUM(CASE WHEN type = 'income' THEN amount END), 0) AS prev_income,
+        COALESCE(SUM(CASE WHEN type = 'expense' THEN amount END), 0) AS prev_expense
+    FROM expenses
+    WHERE user_id = ?
+      AND YEAR(date) = YEAR(CURRENT_DATE() - INTERVAL 1 MONTH)
+      AND MONTH(date) = MONTH(CURRENT_DATE() - INTERVAL 1 MONTH)
+");
+$getPrevMonth->execute([$userId]);
+$prevTotals = $getPrevMonth->fetch();
+$prevIncome  = (float)($prevTotals["prev_income"] ?? 0);
+$prevExpense = (float)($prevTotals["prev_expense"] ?? 0);
+
+/** Percent change vs previous month; null when there is no baseline. */
+function pctChange($current, $previous) {
+    if ($previous <= 0) return null;
+    return round((($current - $previous) / $previous) * 100, 1);
+}
+
+$incomeDelta  = pctChange((float)$totalIncome, $prevIncome);
+$expenseDelta = pctChange((float)$totalExpense, $prevExpense);
 
 $getCategoryTotals = $pdo->prepare("
     SELECT categories.name, SUM(expenses.amount) AS total
@@ -203,6 +277,11 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                     <p class="text-slate-400 text-xs sm:text-sm">Total Income</p>
                 </div>
                 <p class="text-xl sm:text-2xl font-bold text-emerald-400">₱<?= formatMoney($totalIncome) ?></p>
+                <?php if ($incomeDelta !== null): ?>
+                    <p class="text-[11px] mt-1 <?= $incomeDelta >= 0 ? 'text-emerald-400' : 'text-rose-400' ?>">
+                        <?= $incomeDelta >= 0 ? svgIcon('income', 'h-3 w-3') . '+' : '' ?><?= $incomeDelta ?>% vs last month
+                    </p>
+                <?php endif; ?>
             </div>
             <div class="bg-[#111827] rounded-xl p-4 sm:p-5 border border-slate-700">
                 <div class="flex items-center gap-2 mb-1">
@@ -210,6 +289,11 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                     <p class="text-slate-400 text-xs sm:text-sm">Total Expenses</p>
                 </div>
                 <p class="text-xl sm:text-2xl font-bold text-rose-400">₱<?= formatMoney($totalExpense) ?></p>
+                <?php if ($expenseDelta !== null): ?>
+                    <p class="text-[11px] mt-1 <?= $expenseDelta > 0 ? 'text-rose-400' : 'text-emerald-400' ?>">
+                        <?= $expenseDelta > 0 ? svgIcon('expense', 'h-3 w-3') . '+' : '' ?><?= $expenseDelta ?>% vs last month
+                    </p>
+                <?php endif; ?>
             </div>
             <div class="bg-[#111827] rounded-xl p-4 sm:p-5 border border-slate-700">
                 <div class="flex items-center gap-2 mb-1">
@@ -276,7 +360,7 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                                     </p>
                                     <p class="text-xs text-slate-400">
                                         <?= e($bill["category_name"] ?: 'Uncategorized') ?> •
-                                        Due <?= date("M j", strtotime($bill["date"])) ?>
+                                        Due <?= e(formatDueDate($bill["date"])) ?>
                                         <?php if ($bill["source"] === 'recurring'): ?>
                                             • <span class="text-indigo-400 inline-flex items-center gap-1"><?= svgIcon('refresh', 'h-3 w-3') ?> Recurring</span>
                                         <?php endif; ?>
@@ -378,6 +462,10 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                         <?= svgIcon('search') ?>
                         Filter
                     </button>
+                    <a href="index.php?export=1&<?= $queryString ?>"
+                        class="flex-1 text-center bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium py-2.5 rounded-lg transition-colors" title="Download current results as CSV">
+                        <?= svgIcon('download', 'h-4 w-4') ?> Export CSV
+                    </a>
                     <a href="index.php"
                         class="flex-1 text-center bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium py-2.5 rounded-lg transition-colors">
                         Clear
@@ -393,6 +481,14 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                 <span class="text-white font-medium"><?= max($totalPages, 1) ?></span>
                 <?= $hasActiveFilter ? '— <a href="index.php" class="text-indigo-400 hover:underline">Clear filters</a>' : '' ?>
             </p>
+            <?php if ($filteredTotals['income'] > 0 || $filteredTotals['expense'] > 0): ?>
+                <p class="text-xs text-slate-400 mb-4 flex flex-wrap items-center gap-x-4 gap-y-1">
+                    Filtered totals:
+                    <span class="text-emerald-400 font-medium">+₱<?= formatMoney($filteredTotals['income']) ?></span>
+                    <span class="text-rose-400 font-medium">-₱<?= formatMoney($filteredTotals['expense']) ?></span>
+                    <span class="text-slate-300 font-medium">Net ₱<?= formatMoney($filteredTotals['income'] - $filteredTotals['expense']) ?></span>
+                </p>
+            <?php endif; ?>
 
             <?php if (count($expenses) === 0): ?>
                 <div class="text-center py-8">
@@ -426,7 +522,7 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                                     </td>
                                     <td class="py-3 pr-4 whitespace-nowrap">
                                         <span class="bg-indigo-500/10 text-indigo-400 text-xs px-2.5 py-1 rounded-full border border-indigo-500/20">
-                                            <?= e($expense["category_name"]) ?>
+                                            <?= e($expense["category_name"] ?: 'Uncategorized') ?>
                                         </span>
                                     </td>
                                     <td class="py-3 pr-4 text-slate-300 max-w-[180px] truncate">
@@ -489,7 +585,7 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                                     <?= ucfirst($expense['type']) ?>
                                 </span>
 <span class="bg-indigo-500/10 text-indigo-400 text-xs px-2.5 py-0.5 rounded-full border border-indigo-500/20">
-                                    <?= e($expense["category_name"]) ?>
+                                    <?= e($expense["category_name"] ?: 'Uncategorized') ?>
                                 </span>
 <?php $isPaidMobile = (bool)$expense['paid']; ?>
                                 <span data-status-badge class="text-xs px-2.5 py-0.5 rounded-full font-medium <?= $isPaidMobile ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20' ?>">
