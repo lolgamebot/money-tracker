@@ -26,13 +26,15 @@ $getMonthlyData = $pdo->prepare("
     FROM expenses
     WHERE user_id = ?
     AND date >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 MONTH)
-    GROUP BY DATE_FORMAT(date, '%Y-%m')
+    GROUP BY DATE_FORMAT(date, '%Y-%m'), DATE_FORMAT(date, '%b %Y')
     ORDER BY DATE_FORMAT(date, '%Y-%m') ASC
 ");
 $getMonthlyData->execute([$userId]);
 $monthlyData = $getMonthlyData->fetchAll();
 
 // Prepare data for Chart.js
+// JSON_HEX_* flags make user-controlled strings safe inside inline <script>.
+$jsonFlags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 $categoryLabels  = array_column($categoryData, 'name');
 $categoryTotals  = array_column($categoryData, 'total');
 
@@ -119,9 +121,9 @@ $monthlyIncome     = array_column($monthlyData, 'income');
         new Chart(document.getElementById('categoryChart'), {
             type: 'doughnut',
             data: {
-                labels: <?= json_encode($categoryLabels) ?>,
+                labels: <?= json_encode($categoryLabels, $jsonFlags) ?>,
                 datasets: [{
-                    data: <?= json_encode($categoryTotals) ?>,
+                    data: <?= json_encode($categoryTotals, $jsonFlags) ?>,
                     backgroundColor: [
                         '#6366f1', '#f43f5e', '#10b981', '#f59e0b',
                         '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'
@@ -178,11 +180,11 @@ $monthlyIncome     = array_column($monthlyData, 'income');
         new Chart(document.getElementById('monthlyChart'), {
             type: 'bar',
             data: {
-                labels: <?= json_encode($monthLabels) ?>,
+                labels: <?= json_encode($monthLabels, $jsonFlags) ?>,
                 datasets: [
                     {
                         label: 'Income',
-                        data: <?= json_encode($monthlyIncome) ?>,
+                        data: <?= json_encode($monthlyIncome, $jsonFlags) ?>,
                         backgroundColor: '#10b98133',
                         borderColor: '#10b981',
                         borderWidth: 2,
@@ -190,7 +192,7 @@ $monthlyIncome     = array_column($monthlyData, 'income');
                     },
                     {
                         label: 'Expenses',
-                        data: <?= json_encode($monthlyExpenses) ?>,
+                        data: <?= json_encode($monthlyExpenses, $jsonFlags) ?>,
                         backgroundColor: '#f43f5e33',
                         borderColor: '#f43f5e',
                         borderWidth: 2,

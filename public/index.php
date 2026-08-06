@@ -193,6 +193,8 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
     <div class="max-w-5xl mx-auto px-4 sm:px-6 py-8">
         <h1 class="text-2xl font-bold text-white mb-6">Welcome back, <?= e($_SESSION["username"]) ?>!</h1>
 
+        <?php renderFlash(); ?>
+
         <!-- Summary Cards -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-8">
             <div class="bg-[#111827] rounded-xl p-4 sm:p-5 border border-slate-700">

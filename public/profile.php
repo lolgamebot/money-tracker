@@ -82,7 +82,8 @@ $modal = isset($_GET["modal"]) || isAjaxRequest();
 
 // If this is an AJAX submit and the update succeeded, respond with JSON success.
 if (isAjaxRequest() && !empty($successes) && empty($errors)) {
-    respondJson(['success' => true]);
+    $firstSuccess = (string)reset($successes);
+    respondJson(['success' => true, 'message' => $firstSuccess, 'reset' => 'profile.php']);
 }
 ?>
 

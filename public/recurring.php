@@ -25,13 +25,13 @@ $cancelRecurring->execute([date('Y-m-d'), $cancelId, $userId]);
 
     if ($cancelRecurring->rowCount() === 0) {
         setFlash("That recurring record is no longer available.");
-        if (isAjaxRequest()) respondJson(['success' => true]);
+        if (isAjaxRequest()) respondJson(['success' => false, 'message' => 'That recurring record is no longer available.']);
         header("Location: recurring.php");
         exit;
     }
 
+    if (isAjaxRequest()) respondJson(['success' => true, 'message' => 'Recurring schedule stopped.', 'reset' => 'recurring.php']);
     setFlash("Recurring schedule stopped. Generated dashboard entries remain intact.");
-    if (isAjaxRequest()) respondJson(['success' => true]);
     header("Location: recurring.php");
     exit;
 }
@@ -44,22 +44,21 @@ if (isset($_GET["remove_bill"])) {
 
 if (!$bill) {
         setFlash("That bill is not currently listed in Bills Due This Month.");
-        if (isAjaxRequest()) respondJson(['success' => true]);
+        if (isAjaxRequest()) respondJson(['success' => false, 'message' => 'That bill is not currently listed in Bills Due This Month.']);
         header("Location: recurring.php");
         exit;
     }
 
-    if ($bill["source"] === "recurring") {
+        if ($bill["source"] === "recurring") {
         $stopRecurring = $pdo->prepare("UPDATE expenses SET is_recurring = 0, recurring_end_date = ? WHERE id = ? AND user_id = ?");
         $stopRecurring->execute([date('Y-m-d'), $billId, $userId]);
-        setFlash("Recurring bill removed.");
     } else {
         $deleteBill = $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ? AND is_recurring = 0 AND parent_id IS NULL AND recurring_end_date IS NULL");
         $deleteBill->execute([$billId, $userId]);
-        setFlash("Bill removed.");
     }
 
-    if (isAjaxRequest()) respondJson(['success' => true]);
+    if (isAjaxRequest()) respondJson(['success' => true, 'message' => 'Bill removed.', 'reset' => 'recurring.php']);
+    setFlash($bill["source"] === "recurring" ? "Recurring bill removed." : "Bill removed.");
     header("Location: recurring.php");
     exit;
 }
@@ -79,8 +78,8 @@ if (isset($_GET["delete_all"])) {
     $deleteFuture = $pdo->prepare("DELETE FROM expenses WHERE user_id = ? AND parent_id = ? AND date >= ?");
 $deleteFuture->execute([$userId, $deleteId, date('Y-m-d')]);
 
+if (isAjaxRequest()) respondJson(['success' => true, 'message' => 'Deleted recurring template and upcoming records.', 'reset' => 'recurring.php']);
     setFlash("Deleted recurring template and upcoming records. Past records remain intact.");
-    if (isAjaxRequest()) respondJson(['success' => true]);
     header("Location: recurring.php");
     exit;
 }
@@ -102,8 +101,8 @@ if (isset($_GET["mark_paid"])) {
     $billId = (int)$_GET["mark_paid"];
 $paidToggle = isset($_GET["unpaid"]) ? 0 : 1;
     markBillPaid($pdo, $userId, $billId, (bool)$paidToggle);
+    if (isAjaxRequest()) respondJson(['success' => true, 'message' => $paidToggle ? 'Bill marked as paid!' : 'Bill marked as unpaid.', 'reset' => 'recurring.php']);
     setFlash($paidToggle ? "Bill marked as paid!" : "Bill marked as unpaid.");
-    if (isAjaxRequest()) respondJson(['success' => true]);
     header("Location: recurring.php");
     exit;
 }

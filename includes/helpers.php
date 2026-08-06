@@ -519,8 +519,12 @@ function renderModalSystem() {
             });
         }
 
-        // Handle navigation & form submission inside the modal via AJAX.
+// Handle navigation & form submission inside the modal via AJAX.
         function handleAjax(uri, method, formData) {
+            // Preserve the current form so we can restore it after a successful
+            // save (e.g. edit) without re-requesting or closing the modal.
+            var previousHtml = body.innerHTML;
+            var previousTitle = title.textContent;
             openModal();
             title.textContent = "Processing...";
             body.setAttribute("data-loading", "1");
@@ -538,11 +542,42 @@ function renderModalSystem() {
                 }
                 return r.text().then(function(t) { return { text: t }; });
             })
-            .then(function(res) {
+.then(function(res) {
+                body.removeAttribute("data-loading");
                 if (res.json) {
                     if (res.json.success) {
-                        closeModal();
-                        window.location.reload();
+                        // Show a toast and keep the modal open so the user can
+                        // continue adding/editing without being kicked back out.
+                        if (typeof showToast === "function") {
+                            showToast(res.json.message || "Saved successfully!", "success");
+                        }
+                        if (res.json.reset) {
+                            // Re-fetch a fresh form (e.g. after adding) so the
+                            // user can add another record without reloading.
+                            var freshUri = res.json.reset;
+                            fetch(freshUri + (freshUri.indexOf("?") === -1 ? "?" : "&") + "modal=1", {
+                                headers: { "X-Requested-With": "XMLHttpRequest" }
+                            })
+                            .then(function(r) { return r.text(); })
+                            .then(function(html) {
+                                var titleMatch = html.match(/<title data-modal-title>([^<]*)<\/title>/);
+                                if (titleMatch) title.textContent = titleMatch[1];
+                                body.innerHTML = html;
+                                title.textContent = titleMatch ? titleMatch[1] : freshUri;
+                                initModalScripts(body);
+                            })
+                            .catch(function() {
+                                body.innerHTML = previousHtml;
+                                title.textContent = previousTitle;
+                                initModalScripts(body);
+                            });
+                        } else {
+                            // No reset target (e.g. edit): restore the form so it
+                            // stays visible and usable.
+                            body.innerHTML = previousHtml;
+                            title.textContent = previousTitle;
+                            initModalScripts(body);
+                        }
                     } else {
                         // Re-render form with validation errors (HTML).
                         if (res.json.html) {
@@ -554,12 +589,16 @@ function renderModalSystem() {
                         }
                     }
                 } else {
-                    // Follow a redirect target (e.g. edit form) — re-fetch in modal.
+                    // Server returned HTML — e.g. a form re-rendered with
+                    // validation errors (title tag included).
+                    var titleMatch = res.text.match(/<title data-modal-title>([^<]*)<\/title>/);
+                    if (titleMatch) title.textContent = titleMatch[1];
                     body.innerHTML = res.text;
                     initModalScripts(body);
                 }
             })
             .catch(function() {
+                body.removeAttribute("data-loading");
                 body.innerHTML = \'<div class="text-center py-10 text-rose-400">An error occurred.</div>\';
             });
         }
@@ -579,16 +618,17 @@ function renderModalSystem() {
                 if (link) {
                     var href = link.getAttribute("href");
                     if (href && href.indexOf("http") !== 0 && href.charAt(0) !== "#") {
-                        // Let delete.php / logout.php etc. navigate normally.
-                        if (href.indexOf("delete.php") !== -1 || href.indexOf("logout.php") !== -1) {
+                        // Let delete.php / logout.php / index.php (dashboard) navigate
+                        // normally so Cancel returns to the actual dashboard page
+                        // instead of being injected into the modal.
+                        if (href.indexOf("delete.php") !== -1 || href.indexOf("logout.php") !== -1 || href.indexOf("index.php") !== -1) {
                             return;
                         }
-                        if (link.hasAttribute("onclick")) {
-                            // Let confirm() run; if it returns false, stop.
-                            var handler = link.getAttribute("onclick");
-                            if (handler.indexOf("return false") !== -1) {
-                                return;
-                            }
+                        // Inline confirm() handlers (e.g. "return confirm(...)") run
+                        // when the event reaches the target: if the user cancels,
+                        // the default action is prevented. Bail out and do nothing.
+                        if (link.hasAttribute("onclick") && e.defaultPrevented) {
+                            return;
                         }
                         e.preventDefault();
                         handleAjax(href, "GET", null);
@@ -661,6 +701,9 @@ function computeRecurringEndDate($startDate, $interval, $endCondition, $input = 
             $unit = 'months';
         }
 
+        $d = clone $start;
+        $d->modify("+$num $unit");
+        $endDate = $d->format('Y-m-d');
     }
 
 return $endDate;
@@ -850,6 +893,11 @@ function getUpcomingBills($pdo, $userId) {
 
         $dueDate = $nextDate->format('Y-m-d');
 
+        // Respect the template's end date: no occurrences after it are bills.
+        if ($tpl['recurring_end_date'] && $dueDate > $tpl['recurring_end_date']) {
+            continue;
+        }
+
         // Only include if the next occurrence is within the current month
         if ($dueDate >= $monthStart && $dueDate <= $monthEnd) {
             // Check whether this specific occurrence has already been generated
@@ -955,6 +1003,12 @@ function markBillPaid($pdo, $userId, $billId, $paid = true) {
         }
 
         $occurrenceDate = $nextDate->format('Y-m-d');
+
+        // If the next occurrence is past the template's end date, there is
+        // nothing to mark as paid for this month.
+        if ($bill['recurring_end_date'] && $occurrenceDate > $bill['recurring_end_date']) {
+            return false;
+        }
 
         // Check if a child exists for this occurrence
         $checkChild = $pdo->prepare("

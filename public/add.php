@@ -41,10 +41,12 @@ $createExpense->execute([
             $userId, $categoryId, $amount, $type, $description, $date,
             $isRecurring, $recurringInterval, null, $recurringEndDate
         ]);
-        setFlash("Record added successfully!");
-        if (isAjaxRequest()) {
-            respondJson(['success' => true]);
+if (isAjaxRequest()) {
+            // Keep the modal open and show a toast; reset the form so the user
+            // can add another record without being kicked back to the dashboard.
+            respondJson(['success' => true, 'message' => 'Record added successfully!', 'reset' => 'add.php']);
         }
+        setFlash("Record added successfully!");
         header("Location: add.php");
         exit;
     }

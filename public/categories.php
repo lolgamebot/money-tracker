@@ -14,10 +14,10 @@ if (isset($_GET["delete"])) {
     $categoryId = (int)$_GET["delete"];
     $deleteCategory = $pdo->prepare("DELETE FROM categories WHERE id = ? AND user_id = ?");
     $deleteCategory->execute([$categoryId, $userId]);
-    setFlash("Category deleted!");
     if (isAjaxRequest()) {
-        respondJson(['success' => true]);
+        respondJson(['success' => true, 'message' => 'Category deleted!', 'reset' => 'categories.php']);
     }
+    setFlash("Category deleted!");
     header("Location: categories.php");
     exit;
 }
@@ -38,11 +38,11 @@ if (isset($_GET["edit"]) && $_SERVER["REQUEST_METHOD"] == "POST") {
             $errors[] = "Category name already exists!";
         } else {
 $updateCategory = $pdo->prepare("UPDATE categories SET name = ? WHERE id = ? AND user_id = ?");
-            $updateCategory->execute([$newName, $categoryId, $userId]);
-            setFlash("Category renamed!");
+$updateCategory->execute([$newName, $categoryId, $userId]);
             if (isAjaxRequest()) {
-                respondJson(['success' => true]);
+                respondJson(['success' => true, 'message' => 'Category renamed!', 'reset' => 'categories.php']);
             }
+            setFlash("Category renamed!");
             header("Location: categories.php");
             exit;
         }
@@ -64,11 +64,11 @@ if (!isset($_GET["edit"]) && $_SERVER["REQUEST_METHOD"] == "POST") {
             $errors[] = "Category already exists!";
         } else {
 $createCategory = $pdo->prepare("INSERT INTO categories (user_id, name) VALUES (?, ?)");
-            $createCategory->execute([$userId, $categoryName]);
-            setFlash("Category added!");
+$createCategory->execute([$userId, $categoryName]);
             if (isAjaxRequest()) {
-                respondJson(['success' => true]);
+                respondJson(['success' => true, 'message' => 'Category added!', 'reset' => 'categories.php']);
             }
+            setFlash("Category added!");
             header("Location: categories.php");
             exit;
         }

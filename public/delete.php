@@ -28,10 +28,14 @@ if (!$expense) {
 if ($mode === "all") {
     // Determine the recurring series parent ID
     $parentId = $expense["is_recurring"] ? $expense["id"] : $expense["parent_id"];
-    
+
     if ($parentId) {
-        // Delete ONLY the recurring template. This stops all future automatic
-        // generation, while already-generated dashboard records remain intact.
+        // Delete the recurring template AND all its generated child records so
+        // the whole series disappears from the dashboard (matches the
+        // "Delete this record AND all other entries in this recurring series"
+        // confirm text). Without this, orphaned children keep showing up.
+        $deleteChildren = $pdo->prepare("DELETE FROM expenses WHERE parent_id = ? AND user_id = ?");
+        $deleteChildren->execute([$parentId, $userId]);
         $deleteTemplate = $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ?");
         $deleteTemplate->execute([$parentId, $userId]);
     } else {
@@ -45,5 +49,6 @@ if ($mode === "all") {
     $deleteExpense->execute([$expenseId, $userId]);
 }
 
-header("Location: index.php"); 
+setFlash("Record deleted.");
+header("Location: index.php");
 exit;
