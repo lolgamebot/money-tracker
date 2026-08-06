@@ -105,6 +105,14 @@ if (isset($_GET["mark_paid"])) {
     $paidToggle = isset($_GET["unpaid"]) ? 0 : 1;
 markBillPaid($pdo, $userId, $billId, (bool)$paidToggle);
     setFlash($paidToggle ? "Record marked as paid!" : "Record marked as unpaid.");
+// AJAX requests update the UI in place (no full page reload).
+    if (isAjaxRequest()) {
+        // Fetch the record type so the client can render the correct status label.
+        $typeStmt = $pdo->prepare("SELECT type FROM expenses WHERE id = ? AND user_id = ?");
+        $typeStmt->execute([$billId, $userId]);
+        $type = $typeStmt->fetchColumn() ?: 'expense';
+        respondJson(['success' => true, 'id' => $billId, 'paid' => (bool)$paidToggle, 'type' => $type]);
+    }
     header("Location: index.php?" . http_build_query(array_filter([
         "search"    => $search,
         "type"      => $filterType,
@@ -152,7 +160,7 @@ $upcomingBills = getUpcomingBills($pdo, $userId);
 $unpaidBills = array_filter($upcomingBills, function ($b) { return !$b['paid']; });
 $paidBills   = array_filter($upcomingBills, function ($b) { return $b['paid']; });
 
-// Build query string for pagination links
+// Build query string for pagination links (no page param — those append their own)
 $queryString = http_build_query(array_filter([
     "search"      => $search,
     "type"        => $filterType,
@@ -160,6 +168,17 @@ $queryString = http_build_query(array_filter([
     "date_from"   => $filterDateFrom,
     "date_to"     => $filterDateTo,
     "status"      => $filterStatus,
+]));
+
+// Build query string for status toggle links that preserve the current page
+$markQueryString = http_build_query(array_filter([
+    "search"      => $search,
+    "type"        => $filterType,
+    "category"    => $filterCategory,
+    "date_from"   => $filterDateFrom,
+    "date_to"     => $filterDateTo,
+    "status"      => $filterStatus,
+    "page"        => $currentPage,
 ]));
 
 $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCategory) || !empty($filterDateFrom) || !empty($filterDateTo) || !empty($filterStatus);
@@ -395,8 +414,8 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                         </thead>
                         <tbody class="divide-y divide-slate-800">
                             <?php foreach ($expenses as $expense): ?>
-                                <?php $isRecurringSeries = $expense['is_recurring'] || !empty($expense['parent_id']); ?>
-                                <tr class="hover:bg-slate-800/30 transition-colors">
+<?php $isRecurringSeries = $expense['is_recurring'] || !empty($expense['parent_id']); ?>
+                                <tr class="hover:bg-slate-800/30 transition-colors" data-status-row data-type="<?= e($expense['type']) ?>">
                                     <td class="py-3 pr-4 text-slate-400 whitespace-nowrap"><?= e($expense["date"]) ?></td>
                                     <td class="py-3 pr-4 whitespace-nowrap">
                                         <span class="text-xs px-2.5 py-1 rounded-full <?= $expense['type'] == 'income' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20' ?>">
@@ -421,11 +440,11 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                                     </td>
                                     <?php $isPaid = (bool)$expense['paid']; ?>
                                     <td class="py-3 pr-4 whitespace-nowrap">
-                                        <span class="text-xs px-2.5 py-1 rounded-full font-medium <?= $isPaid ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20' ?>">
+<span data-status-badge class="text-xs px-2.5 py-1 rounded-full font-medium <?= $isPaid ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20' ?>">
                                             <?= $expense['type'] == 'income' ? ($isPaid ? 'Received' : 'Pending') : ($isPaid ? 'Paid' : 'Unpaid') ?>
                                         </span>
-                                        <a href="index.php?mark_paid=<?= (int)$expense['id'] ?><?= $isPaid ? '&unpaid=1' : '' ?><?= !empty($queryString) ? '&' . $queryString : '' ?><?= getCsrfQueryParam() ?>"
-                                           class="text-indigo-400 hover:text-indigo-300 text-xs ml-2 transition-colors" title="Toggle status">
+<a href="index.php?mark_paid=<?= (int)$expense['id'] ?><?= $isPaid ? '&unpaid=1' : '' ?><?= !empty($markQueryString) ? '&' . $markQueryString : '' ?><?= getCsrfQueryParam() ?>"
+                                           class="text-indigo-400 hover:text-indigo-300 text-xs ml-2 transition-colors" title="Toggle status" data-mark-toggle>
                                             <?= $isPaid ? 'Undo' : 'Mark' ?>
                                         </a>
                                     </td>
@@ -449,8 +468,8 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                 <!-- Mobile Card List View -->
                 <div class="block md:hidden space-y-3">
                     <?php foreach ($expenses as $expense): ?>
-                        <?php $isRecurringSeries = $expense['is_recurring'] || !empty($expense['parent_id']); ?>
-                        <div class="bg-[#0a0f1e] border border-slate-700/80 rounded-xl p-4 space-y-2.5">
+<?php $isRecurringSeries = $expense['is_recurring'] || !empty($expense['parent_id']); ?>
+                        <div class="bg-[#0a0f1e] border border-slate-700/80 rounded-xl p-4 space-y-2.5" data-status-row data-type="<?= e($expense['type']) ?>">
                             <div class="flex items-start justify-between gap-2">
                                 <div>
                                     <p class="font-semibold text-white text-base">
@@ -470,8 +489,8 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
 <span class="bg-indigo-500/10 text-indigo-400 text-xs px-2.5 py-0.5 rounded-full border border-indigo-500/20">
                                     <?= e($expense["category_name"]) ?>
                                 </span>
-                                <?php $isPaidMobile = (bool)$expense['paid']; ?>
-                                <span class="text-xs px-2.5 py-0.5 rounded-full font-medium <?= $isPaidMobile ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20' ?>">
+<?php $isPaidMobile = (bool)$expense['paid']; ?>
+                                <span data-status-badge class="text-xs px-2.5 py-0.5 rounded-full font-medium <?= $isPaidMobile ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20' ?>">
                                     <?= $expense['type'] == 'income' ? ($isPaidMobile ? 'Received' : 'Pending') : ($isPaidMobile ? 'Paid' : 'Unpaid') ?>
                                 </span>
                                 <?php if ($isRecurringSeries): ?>
@@ -482,7 +501,8 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
                             </div>
 
                             <div class="flex items-center justify-end gap-3 pt-2 text-xs border-t border-slate-800/80">
-                                <a href="index.php?mark_paid=<?= (int)$expense['id'] ?><?= $isPaidMobile ? '&unpaid=1' : '' ?><?= !empty($queryString) ? '&' . $queryString : '' ?><?= getCsrfQueryParam() ?>"
+<a href="index.php?mark_paid=<?= (int)$expense['id'] ?><?= $isPaidMobile ? '&unpaid=1' : '' ?><?= !empty($markQueryString) ? '&' . $markQueryString : '' ?><?= getCsrfQueryParam() ?>"
+                                   data-mark-toggle
                                    class="<?= $isPaidMobile ? 'text-slate-400 bg-slate-800 border border-slate-700' : 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/30' ?> px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5">
 <?= svgIcon($isPaidMobile ? 'refresh' : 'check') ?>
                                     <?= $isPaidMobile ? 'Mark Unpaid' : 'Mark Paid' ?>
@@ -531,9 +551,79 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
         </div>
     </div>
 
-    <script>
+<script>
         flatpickr("#dateFrom", { dateFormat: "Y-m-d", allowInput: true, animate: true });
         flatpickr("#dateTo", { dateFormat: "Y-m-d", allowInput: true, animate: true });
+
+// Toggle record status via AJAX so the page updates in place (no reload/jump).
+        document.addEventListener("click", function(e) {
+            var link = e.target.closest ? e.target.closest("[data-mark-toggle]") : null;
+            if (!link) return;
+            e.preventDefault();
+
+            // Disable the link while the request is in flight.
+            link.style.pointerEvents = "none";
+            link.style.opacity = "0.5";
+
+            fetch(link.getAttribute("href"), {
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            })
+            .then(function(r) { return r.json(); })
+.then(function(data) {
+                if (!data.success) return;
+                var type = data.type || "expense";
+                var paid  = !!data.paid;
+                var row   = link.closest("[data-status-row]");
+
+                // Show a toast notification for the status change.
+                var notice = (type === "income") ? (paid ? "Marked as received" : "Marked as pending") : (paid ? "Marked as paid" : "Marked as unpaid");
+                showToast(notice, "success");
+
+                if (row) {
+                    // Update the status badge in place.
+                    var badge = row.querySelector("[data-status-badge]");
+                    if (badge) {
+                        var label = (type === "income") ? (paid ? "Received" : "Pending") : (paid ? "Paid" : "Unpaid");
+                        badge.textContent = label;
+                        badge.className = "text-xs px-2.5 py-1 rounded-full font-medium " +
+                            (paid ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                   : "bg-amber-500/10 text-amber-400 border border-amber-500/20");
+                    }
+// Update the row's opacity to reflect paid/unpaid.
+                    row.classList.toggle("opacity-60", paid);
+
+                    // Rebuild the href to flip the toggle for the next click.
+                    var base = link.getAttribute("href").split("unpaid=")[0];
+                    link.setAttribute("href", base + (paid ? "unpaid=1" : "") );
+
+                    // Mobile button uses an icon + "Mark Paid"/"Mark Unpaid" text.
+                    var icon = link.querySelector("svg");
+                    if (icon) {
+                        // Preserve the icon but swap its inner path to check/refresh.
+                        link.innerHTML =
+                            (paid
+                                ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> '
+                                : '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> ') +
+                            (paid ? "Mark Unpaid" : "Mark Paid");
+                        var paidCls = "text-slate-400 bg-slate-800 border border-slate-700";
+                        var unpaidCls = "text-emerald-400 bg-emerald-500/10 border border-emerald-500/30";
+                        link.className = (paid ? paidCls : unpaidCls) + " px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5";
+                    } else {
+                        // Desktop shows a plain "Mark"/"Undo" text link.
+                        link.textContent = paid ? "Undo" : "Mark";
+                        link.classList.toggle("text-indigo-400", !paid);
+                        link.classList.toggle("hover:text-indigo-300", !paid);
+                    }
+                }
+
+                link.style.pointerEvents = "";
+                link.style.opacity = "";
+            })
+            .catch(function() {
+                link.style.pointerEvents = "";
+                link.style.opacity = "";
+            });
+        });
     </script>
 
 <?php renderFooter(); ?>
