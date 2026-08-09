@@ -265,7 +265,13 @@ $hasActiveFilter = !empty($search) || !empty($filterType) || !empty($filterCateg
     <?php renderModalSystem(); ?>
 
     <div class="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-        <h1 class="text-2xl font-bold text-white mb-6">Welcome back, <?= e($_SESSION["username"]) ?>!</h1>
+        <div class="flex items-center justify-between mb-6">
+            <h1 class="text-2xl font-bold text-white">Welcome back, <?= e($_SESSION["username"]) ?>!</h1>
+            <a href="add.php" data-modal-uri="add.php" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+                <?= svgIcon('plus') ?>
+                Add Record
+            </a>
+        </div>
 
         <?php renderFlash(); ?>
 

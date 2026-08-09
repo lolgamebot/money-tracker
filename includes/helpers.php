@@ -402,11 +402,9 @@ CSS;
 /** Top navigation bar (shared by all authenticated pages). */
 function renderNav() {
     $currentPage = basename($_SERVER["PHP_SELF"]);
-    $onDashboard = $currentPage === "index.php";
 
     $links = [
         "index.php"     => ["Dashboard", "home"],
-        "add.php"       => ["Add Record", "plus"],
         "categories.php"=> ["Categories", "category"],
         "recurring.php" => ["Recurring", "refresh"],
         "charts.php"    => ["Charts", "chart"],
@@ -418,9 +416,7 @@ function renderNav() {
         $label = $item[0];
         $icon  = $item[1];
         $isActive = $currentPage === $page ? "text-white bg-slate-700/60 font-semibold" : "text-slate-400 hover:text-white hover:bg-slate-700/40";
-        // On the dashboard, nav items open as popups; elsewhere they navigate normally.
-        $modalAttr = ($onDashboard && $page !== "index.php") ? " data-modal-uri='{$page}'" : "";
-        $navLinks .= "<a href='{$page}'{$modalAttr} class='{$isActive} transition-colors py-2 px-3 rounded-lg text-sm whitespace-nowrap flex items-center gap-2'>" . svgIcon($icon) . $label . "</a>";
+        $navLinks .= "<a href='{$page}' class='{$isActive} transition-colors py-2 px-3 rounded-lg text-sm whitespace-nowrap flex items-center gap-2'>" . svgIcon($icon) . $label . "</a>";
     }
 
     $logoutLink = '<a href="logout.php?csrf_token=' . urlencode(getCsrfToken()) . '" class="text-rose-400 hover:text-rose-300 transition-colors py-2 px-3 rounded-lg hover:bg-slate-700/50 text-sm font-medium flex items-center gap-2">' . svgIcon('logout') . 'Logout</a>';
