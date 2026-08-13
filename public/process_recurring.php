@@ -36,10 +36,12 @@ function processRecurring($pdo, $userId) {
     }
 
     // Prepare the INSERT statement once and reuse it
+    // Generated children are always dated today or earlier (cutoff = today),
+    // so they are inserted already marked as paid.
     $insertEntry = $pdo->prepare("
         INSERT INTO expenses
-        (user_id, category_id, amount, type, description, date, is_recurring, recurring_interval, recurring_end_date, parent_id)
-        VALUES (?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?)
+        (user_id, category_id, amount, type, description, date, is_recurring, recurring_interval, recurring_end_date, parent_id, paid, paid_at)
+        VALUES (?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?, 1, ?)
     ");
 
     $today    = new DateTime('today');
@@ -79,7 +81,8 @@ function processRecurring($pdo, $userId) {
                     $record["type"],
                     $record["description"],
                     $formattedDate,
-                    $record["id"]
+                    $record["id"],
+                    date('Y-m-d H:i:s')
                 ]);
                 // Track it so duplicate inserts are skipped within this run
                 $existingMap[$record["id"]][$formattedDate] = true;

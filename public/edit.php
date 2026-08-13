@@ -52,14 +52,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $recurringEndDate = computeRecurringEndDate($date, $recurringInterval, $endCondition, $_POST);
         }
 
+        // Records dated today or earlier are treated as paid automatically;
+        // future-dated records keep their existing paid state.
+        $newPaid   = ($date <= date('Y-m-d')) ? 1 : (int)$expense['paid'];
+        $newPaidAt = ($newPaid && !(int)$expense['paid']) ? date('Y-m-d H:i:s') : $expense['paid_at'];
+
         $updateExpense = $pdo->prepare("
             UPDATE expenses
-            SET amount=?, category_id=?, type=?, description=?, date=?, is_recurring=?, recurring_interval=?, recurring_end_date=?
+            SET amount=?, category_id=?, type=?, description=?, date=?, is_recurring=?, recurring_interval=?, recurring_end_date=?, paid=?, paid_at=?
             WHERE id=? AND user_id=?
         ");
         $updateExpense->execute([
             $amount, $categoryId, $type, $description, $date,
-            $isRecurring, $recurringInterval, $recurringEndDate,
+            $isRecurring, $recurringInterval, $recurringEndDate, $newPaid, $newPaidAt,
             $expenseId, $userId
         ]);
 

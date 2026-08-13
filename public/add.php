@@ -37,14 +37,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $errors[] = "Please enter a valid date (YYYY-MM-DD)!";
     } else {
         $amount = round((float)$amount, 2);
+        $isPaid = $date <= date('Y-m-d') ? 1 : 0;
+        $paidAt = $isPaid ? date('Y-m-d H:i:s') : null;
         $createExpense = $pdo->prepare("
             INSERT INTO expenses
-            (user_id, category_id, amount, type, description, date, is_recurring, recurring_interval, recurring_duration, recurring_end_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (user_id, category_id, amount, type, description, date, is_recurring, recurring_interval, recurring_duration, recurring_end_date, paid, paid_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 $createExpense->execute([
             $userId, $categoryId, $amount, $type, $description, $date,
-            $isRecurring, $recurringInterval, null, $recurringEndDate
+            $isRecurring, $recurringInterval, null, $recurringEndDate, $isPaid, $paidAt
         ]);
 if (isAjaxRequest()) {
             // Keep the modal open and reset the form so the user can quickly
